@@ -13,6 +13,7 @@ A session working on project A needs project B to change code: the A session (th
   - Same machine: send both the first message (`create_agent`'s `initialPrompt`) and follow-ups (`send_agent_prompt`) with the MCP tools, with `[Cross-project message] From ` + the `whoami` output as the first line. Use MCP rather than `tell` to keep finish notifications.
   - Cross-machine: always `paseo-peer <machine> tell <id> "…"` (`--file` for long messages); the script adds the sender line and the reply command.
   - Child sessions within the same project don't need it.
+- **Same-project helper and the sidebar**: a session started from a session with `create_agent` (or `paseo run` with `PASEO_AGENT_ID` set) is recorded as that session's child (label `paseo.parent-agent-id`): it is not listed on its own in the sidebar, but notifies the initiator when it finishes. When the user wants to see it in the sidebar and talk to it directly, start it as a top-level session in its own workspace: `env -u PASEO_AGENT_ID paseo run --no-wait --new-workspace local --cwd <project dir> --title "…" …`, then `paseo workspace rename <workspaceId> "…"` (a new workspace is called main by default). A top-level session sends no finish notification; it reports back with `tell`.
 
 ## 1. Start the helper session
 

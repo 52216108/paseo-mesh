@@ -13,6 +13,7 @@ description: 一个项目的工作需要另一个项目配合时（如订单服�
   - 同一台机器：首条（`create_agent` 的 `initialPrompt`）和后续消息（`send_agent_prompt`）都用 MCP 工具发，第一行手写 `【跨项目消息】来自` + `whoami` 的输出。用 MCP 而不是 `tell`，是为了保留完成通知。
   - 跨机器：一律 `paseo-peer <机器> tell <id> "…"`（长消息用 `--file`），脚本自动加开头来源和末尾回复命令。
   - 同一项目内的子会话不用加。
+- **同一项目内开协同会话，侧边栏是否可见**：会话里用 `create_agent`（或带着 `PASEO_AGENT_ID` 跑 `paseo run`）开的会话会记成本会话的子会话（标签 `paseo.parent-agent-id`），不在侧边栏单独列出，但做完自动通知发起方。用户要在侧边栏单独看到、直接和它对话时，开成独立工作区的顶层会话：`env -u PASEO_AGENT_ID paseo run --no-wait --new-workspace local --cwd <项目目录> --title "…" …`，再 `paseo workspace rename <工作区id> "…"`（新工作区默认叫 main）；顶层会话不会自动通知，靠它 `tell` 回报。
 
 ## 1. 开配合会话
 
