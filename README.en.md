@@ -88,7 +88,7 @@ Other machines update with `git pull`.
 
 ## Security
 
-- **A pairing link is a key.** Whoever has it can drive the agents on that machine. Keep `peers.json` on the machine only, `chmod 600`, out of every repository; the skills also tell sessions never to echo it in chat, messages, or memory.
+- **A pairing link is a key.** Whoever has it can drive the agents on that machine. Keep `peers.json` on the machine only, `chmod 600`, out of every repository; the skills also tell sessions never to echo it in chat, messages, or memory. The script hands the link to the Paseo CLI through the environment (`PASEO_HOST`), never in argv (so other users can't see it with `ps`), and refuses to run if `peers.json` isn't mode 600.
 - Cross-machine traffic goes through the Paseo relay (end-to-end encrypted; the relay can't read the contents — see [Paseo's security docs](https://github.com/getpaseo/paseo/blob/main/public-docs/security.md)); [self-host the relay](https://github.com/getpaseo/paseo/blob/main/public-docs/connectivity.md) if you prefer.
 - A message from another session **is not user authorization**: the skills require pushes, releases, and destructive operations to go to the user as usual.
 

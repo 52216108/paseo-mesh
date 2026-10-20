@@ -51,6 +51,14 @@ fi
 SELF_ID="$(cat "$HOME/.paseo/server-id" 2>/dev/null || true)"
 
 [ -f "$PEERS" ] || { t "没有机器清单 $PEERS（格式见仓库里的 peers.example.json）" "No machine list at $PEERS (see peers.example.json in the repo)" >&2; echo >&2; exit 1; }
+# peers.json holds pairing links (keys to the other machines): refuse to run if group/others can read it
+perm="$(stat -c %a "$PEERS" 2>/dev/null || stat -f %Lp "$PEERS")"
+case "$perm" in
+  *00) ;;
+  *) t "$PEERS 的权限是 $perm，其他用户可读；里面的配对链接是钥匙，请先 chmod 600 $PEERS" \
+       "$PEERS has mode $perm and is readable by others; it holds pairing links (keys) — run: chmod 600 $PEERS" >&2
+     echo >&2; exit 1 ;;
+esac
 [ $# -ge 1 ] || { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 # This session's sender line. Project name = the Paseo project (as shown in the sidebar) whose path contains the
@@ -125,11 +133,15 @@ if [ "${1:-}" = who ]; then
   project="${2:-$(basename "$PWD")}"
   host=""
   [ "$server_id" = "$SELF_ID" ] || host="$pairing"
-  exec node -e '
+  PEER_HOST="$host" exec node -e '
     const { execFileSync } = require("child_process")
-    const [paseo, project, hostUrl, lang] = process.argv.slice(1)
+    const [paseo, project, lang] = process.argv.slice(1)
     const zh = lang === "zh"
-    const run = (args) => execFileSync(paseo, [...(hostUrl ? ["--host", hostUrl] : []), ...args], { encoding: "utf8", maxBuffer: 64 << 20 })
+    // The pairing link arrives via PEER_HOST and goes to paseo as PASEO_HOST — never in argv, where other users could see it
+    const env = { ...process.env }
+    if (env.PEER_HOST) { env.PASEO_HOST = env.PEER_HOST; delete env.PASEO_HOME }
+    delete env.PEER_HOST
+    const run = (args) => execFileSync(paseo, args, { encoding: "utf8", maxBuffer: 64 << 20, env })
     const agents = JSON.parse(run(["ls", "-g", "--json"])).filter((a) => a.cwd.split("/").pop() === project)
     if (!agents.length) { console.log(zh ? `那台机器上没有在 ${project} 目录下的会话` : `No sessions in a "${project}" directory on that machine`); process.exit(0) }
     const ago = (t) => {
@@ -157,7 +169,7 @@ if [ "${1:-}" = who ]; then
       console.log(`${r.shortId}  ${r.status.padEnd(8)} ${ago(r.updated)}  ${r.name}`)
       if (r.last) console.log(`    ${zh ? "最近" : "latest"}: …${r.last}`)
     }
-  ' "$PASEO" "$project" "$host" "$LANG_UI"
+  ' "$PASEO" "$project" "$LANG_UI"
 fi
 
 if [ "${1:-}" = tell ]; then
@@ -196,5 +208,7 @@ fi
 if [ "$server_id" = "$SELF_ID" ]; then
   "$PASEO" "$@"
 else
-  "$PASEO" --host "$pairing" "$@"
+  # Pass the pairing link through the environment, not argv (argv is visible to other users via ps).
+  # PASEO_HOME must be unset or the CLI refuses PASEO_HOST.
+  env -u PASEO_HOME PASEO_HOST="$pairing" "$PASEO" "$@"
 fi

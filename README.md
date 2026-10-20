@@ -88,7 +88,7 @@ ln -s ~/projects/paseo-mesh/skills/paseo-cross-project-zh ~/.claude/skills/paseo
 
 ## 安全
 
-- **配对链接 = 钥匙**。拿到它的人可以操控那台机器上的 agent。`peers.json` 只放本机、`chmod 600`、不进任何仓库；skill 也要求会话不在对话、消息、记忆里回显它。
+- **配对链接 = 钥匙**。拿到它的人可以操控那台机器上的 agent。`peers.json` 只放本机、`chmod 600`、不进任何仓库；skill 也要求会话不在对话、消息、记忆里回显它。脚本把链接经环境变量（`PASEO_HOST`）交给 Paseo CLI，不出现在命令行参数里（其他系统用户用 `ps` 看不到）；`peers.json` 权限不是 600 时脚本拒绝运行。
 - 跨机器流量经 Paseo 中继转发（端到端加密，中继读不到内容，见 [Paseo 安全文档](https://github.com/getpaseo/paseo/blob/main/public-docs/security.md)）；对中继有顾虑可以[自建中继](https://github.com/getpaseo/paseo/blob/main/public-docs/connectivity.md)。
 - 来自其他会话的消息**不等于用户授权**：skill 要求推送、发布、破坏性操作照常找用户确认。
 
