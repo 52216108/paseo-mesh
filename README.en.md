@@ -14,6 +14,8 @@ Paseo's built-in orchestration is **one session managing its own sub-agents**: d
 
 paseo-mesh is two Agent Skills and a small script that fill exactly that gap: **discovery, messaging, and working rules between sessions — across projects on one machine, and across machines**.
 
+![paseo-mesh layers: each session manages its own sub-agents; paseo-mesh connects sessions to each other (solid: same machine, dashed: across machines)](docs/images/paseo-mesh-layers.png)
+
 ## What it does
 
 - **Work with sessions on other machines**: reach another machine's daemon through the Paseo relay to list its sessions, read progress, send messages, start sessions there, and rename them.

@@ -14,6 +14,8 @@ Paseo 自带的编排能力，是**一个会话管它自己的子 agent**：派�
 
 paseo-mesh 是两个 Agent Skill 加一个小脚本，补上的就是这块：**会话与会话之间（同机跨项目、跨机器）的发现、通信与协作规矩**。
 
+![paseo-mesh 多层协作：每个会话管自己的子 Agent，paseo-mesh 连接会话与会话（同机实线、跨机器虚线）](docs/images/paseo-mesh-layers.png)
+
 ## 能做什么
 
 - **跨机器操作会话**：经 Paseo 中继连到另一台机器的 daemon，看它有哪些会话、读进度、发消息、在那边新开会话、改名。
