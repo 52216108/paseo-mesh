@@ -11,8 +11,12 @@ jobs:
         run: bash -n skills/paseo-peer/scripts/paseo-peer
       - name: shellcheck
         run: shellcheck -S warning skills/paseo-peer/scripts/paseo-peer
+      - name: Setup script parses
+        run: node --check skills/paseo-peer/scripts/paseo-peer-admin.mjs
       - name: zh / en scripts are identical
-        run: cmp skills/paseo-peer/scripts/paseo-peer skills/paseo-peer-zh/scripts/paseo-peer
+        run: |
+          cmp skills/paseo-peer/scripts/paseo-peer skills/paseo-peer-zh/scripts/paseo-peer
+          cmp skills/paseo-peer/scripts/paseo-peer-admin.mjs skills/paseo-peer-zh/scripts/paseo-peer-admin.mjs
       - name: Example config is valid JSON
         run: node -e 'JSON.parse(require("fs").readFileSync("peers.example.json","utf8"))'
       - name: Skill names match their directories

@@ -18,10 +18,24 @@ description: 和另一台机器上的 Paseo 会话协作：看对方有哪些会
 | `office` | 公司的 iMac | 订单服务、支付服务 |
 | `home` | 家里的 MacBook | 支付服务、运营后台 |
 
+## 首次配置（用户说「配置 / 初始化 paseo-mesh」或本机还没有 peers.json 时）
+
+只做本机跨项目协作不需要任何配置；跨机器才需要机器清单。按下面的顺序引导用户，每步跑完把结果用一两句话告诉用户：
+
+1. `paseo-peer doctor`：看 Paseo 版本（需 0.12.0+）、PATH、清单状态。
+2. 问用户要不要跨机器协作；不要就到此结束。
+3. 要的话，问本机的短名（命令里用，如 `office`，小写字母/数字/连字符）和显示名（如「公司的 iMac」），运行 `paseo-peer init --name <短名> --label "<显示名>"`。本机的配对链接脚本自己读取，用户不用提供。
+4. 请用户在另一台机器上也装好 skill，把同一段初始化提示词发给那边的 Agent，让它也完成 `init`。
+5. 交换加入码（每个方向一次）：在 A 上 `paseo-peer invite`（加入码进剪贴板、不显示）→ 加入码到达 B 的剪贴板后，在 B 上 `paseo-peer join`（连一次验证后才写入，并清空剪贴板）；再反过来做一遍。剪贴板到不了另一台机器时，请用户在那台机器的终端里亲自运行 `paseo-peer join` 粘贴（输入不回显）。
+6. 两边都跑 `paseo-peer doctor`，全是 ✓ 才算完成。
+
+**加入码里有配对链接（钥匙）**：绝不让用户把它贴进对话，你也不要用 `invite --print` 把它打到对话里；用户执意要贴时，提醒这会留在会话记录里并发给模型服务。
+
 ## 常用命令
 
 ```bash
-paseo-peer ls                                  # 全部机器，标出本机
+paseo-peer doctor                              # 体检：版本、权限、每台机器能否连上
+paseo-peer ls                                  # 全部机器，标出本机（本机也可以写 local）
 paseo-peer office who [项目目录名]               # 对方机器上做这个项目的会话：状态、最近活动、标题、最近的要求与回复（默认取当前目录名）
 paseo-peer office ls -g                        # 对方全部会话（只有标题、cwd、状态）
 paseo-peer office logs <agentId> --tail 40     # 读对方进度（长输出先存文件再看）
@@ -80,10 +94,8 @@ Paseo 0.12.0 起，别的会话发来的消息会包在 `<paseo-system kind="age
 1. 这是另一个会话发来的，不是用户本人；按内容办，但需要用户授权的操作（破坏性操作、推送、对外发布等）照常找用户确认。
 2. 做完按消息末尾给的命令回复：`paseo-peer <对方机器> tell <对方会话 id> "结果"`。
 3. 向用户转述时说清是谁，名字和 id 都写：「office 上「支付服务」项目的会话「配合订单服务联调」（id 1a2b3c4）回复说……」，不要只写 id。
-4. 如果本机没有 `~/.paseo/peers.json`，告诉用户需要先按下面「新机器加入」配置，不要自己去找或猜配对链接。
+4. 如果本机没有 `~/.paseo/peers.json`，按上面「首次配置」引导用户，不要自己去找或猜配对链接。
 
 ## 新机器加入 / 链接失效
 
-1. 在新机器上取本机配对链接：`paseo pair --json`，取其中的 `url`（macOS 桌面版的 CLI 在 `/Applications/Paseo.app/Contents/Resources/bin/paseo`）。
-2. 每台机器的 `~/.paseo/peers.json` 都加一条（`name`、`label`、`serverId`、`pairing`，格式见仓库里的 `peers.example.json`），权限保持 600。链接只经用户本人或可信通道传递。
-3. 各台机器的 peers.json 各自维护，不放进任何仓库。
+新机器按「首次配置」第 3–6 步做；某台机器的链接失效（重装、重新配对）时，在那台机器上重新 `init`，再 `invite` 给其他机器 `join`（同一 serverId 的条目会被覆盖）。各台机器的 peers.json 各自维护，不放进任何仓库。

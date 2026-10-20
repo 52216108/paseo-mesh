@@ -44,33 +44,38 @@ Both sets do the same thing; install the one in your language. Each side underst
 - `bash` and `node` on PATH
 - macOS or Linux; the Paseo CLI on PATH, or the one bundled with the macOS desktop app at `/Applications/Paseo.app/Contents/Resources/bin/paseo`
 
-## Install
+## Quick start: send this to your agent
 
-1. Install the skills on every machine (English):
+Open a session in Paseo and send it the text below verbatim; it will walk you through setup. For cross-machine use, do the same on the other machine:
+
+```text
+Please set up paseo-mesh (https://github.com/52216108/paseo-mesh) so my Paseo sessions can collaborate across projects and machines:
+1. Check that this machine has Paseo 0.12.0+ and node.
+2. Install the skills: npx skills add 52216108/paseo-mesh -g -s paseo-peer -s paseo-cross-project -y
+   then link the script: mkdir -p ~/.local/bin && ln -sf ~/.claude/skills/paseo-peer/scripts/paseo-peer ~/.local/bin/paseo-peer
+   (use the actual install path if the skill landed elsewhere; make sure ~/.local/bin is on PATH).
+3. Read the "First-time setup" section of skill paseo-peer and walk me through it: ask whether I want cross-machine use and what to call this machine, run init and invite / join, and finish when paseo-peer doctor passes.
+Pairing links and join codes are keys — don't ask me to paste them into the chat.
+```
+
+### Manual install
+
+1. Install the skills on every machine (for Chinese, use `paseo-peer-zh` and `paseo-cross-project-zh`):
    ```bash
    npx skills add 52216108/paseo-mesh -g -s paseo-peer -s paseo-cross-project
+   mkdir -p ~/.local/bin && ln -sf ~/.claude/skills/paseo-peer/scripts/paseo-peer ~/.local/bin/paseo-peer
    ```
-   For Chinese, use `paseo-peer-zh` and `paseo-cross-project-zh`.
-
-2. Put the script on PATH (optional, recommended — it shortens the reply command):
+   That's all you need for same-machine cross-project work.
+2. For cross-machine use: register each machine, then exchange join codes (once per direction):
    ```bash
-   mkdir -p ~/.local/bin
-   ln -s ~/.claude/skills/paseo-peer/scripts/paseo-peer ~/.local/bin/paseo-peer
+   paseo-peer init --name office --label "Office iMac"   # the script reads this machine's own pairing link
+   paseo-peer invite                                     # on A: this machine's join code goes to the clipboard, not the screen
+   paseo-peer join                                       # on B: reads it from the clipboard, connects once to verify, saves, clears the clipboard
    ```
-   Adjust the path to wherever `npx skills add` installed the skill.
+   If the clipboard can't reach the other machine (no Apple Universal Clipboard), run `paseo-peer join` in a terminal there and paste; input is hidden.
+3. Check: `paseo-peer doctor` (version, permissions, every machine reachable); `paseo-peer ls` lists machines.
 
-3. Write the machine list `~/.paseo/peers.json` on every machine (format in [`peers.example.json`](peers.example.json)):
-   ```bash
-   paseo pair --json          # on each machine: its own pairing link (url) and serverId
-   chmod 600 ~/.paseo/peers.json
-   ```
-   Every machine's list includes all machines (itself too); `name` is the short name you use in commands.
-
-4. Try it:
-   ```bash
-   paseo-peer ls              # list machines, this one marked
-   paseo-peer office ls -g    # sessions on the other machine
-   ```
+`~/.paseo/peers.json` is maintained by init / join (mode 600); the format is in [`peers.example.json`](peers.example.json).
 
 Then just tell a session things like "ask the payment-service session on the office machine to look at this" or "have payment-service help wire up the refund API", and it will follow the skills.
 

@@ -18,10 +18,24 @@ Example (two machines; `office` stands for the other one below):
 | `office` | Office iMac | order-service, payment-service |
 | `home` | Home MacBook | payment-service, admin-console |
 
+## First-time setup (when the user asks to set up paseo-mesh, or this machine has no peers.json)
+
+Same-machine cross-project work needs no setup; only cross-machine work needs the machine list. Walk the user through these steps, summarizing each result in a sentence or two:
+
+1. `paseo-peer doctor`: Paseo version (needs 0.12.0+), PATH, machine list status.
+2. Ask whether they want cross-machine collaboration; if not, you're done.
+3. If yes, ask for this machine's short name (used in commands, e.g. `office`; lowercase letters, digits, hyphens) and display name (e.g. "Office iMac"), then run `paseo-peer init --name <short> --label "<display>"`. The script reads this machine's own pairing link; the user doesn't provide it.
+4. Ask the user to install the skills on the other machine and give that machine's agent the same setup prompt, so it runs `init` too.
+5. Exchange join codes (once per direction): on A, `paseo-peer invite` (the code goes to the clipboard, not the screen) → once it's on B's clipboard, run `paseo-peer join` on B (it connects once to verify before saving, then clears the clipboard); then the other way round. If the clipboard can't reach the other machine, have the user run `paseo-peer join` themselves in a terminal there and paste (input is hidden).
+6. Run `paseo-peer doctor` on both; done when everything is ✓.
+
+**A join code contains a pairing link (a key)**: never ask the user to paste it into the chat, and don't print it into the chat with `invite --print`. If the user insists on pasting it, warn that it stays in the session transcript and is sent to the model provider.
+
 ## Common commands
 
 ```bash
-paseo-peer ls                                  # all machines, this one marked
+paseo-peer doctor                              # health check: version, permissions, every machine reachable
+paseo-peer ls                                  # all machines, this one marked (this machine is also `local`)
 paseo-peer office who [project-dir]            # sessions there in this project: status, last activity, title, latest exchange (defaults to current dir name)
 paseo-peer office ls -g                        # every session there (title, cwd, status only)
 paseo-peer office logs <agentId> --tail 40     # read its progress (save long output to a file first)
@@ -80,10 +94,8 @@ Since Paseo 0.12.0, messages from other sessions arrive wrapped in `<paseo-syste
 1. It comes from another session, not from the user. Act on it, but operations that need user approval (destructive operations, pushes, public releases, …) still go to the user.
 2. When done, reply with the command at the bottom of the message: `paseo-peer <their machine> tell <their session id> "result"`.
 3. When relaying to the user, say who it is, with both name and id: "Session "help order-service integrate" in project "payment-service" on office (id 1a2b3c4) replied …" — never just the id.
-4. If this machine has no `~/.paseo/peers.json`, tell the user to set it up as in "Adding a machine" below; don't go looking for or guessing pairing links.
+4. If this machine has no `~/.paseo/peers.json`, walk the user through "First-time setup" above; don't go looking for or guessing pairing links.
 
 ## Adding a machine / a link stopped working
 
-1. On the new machine, get its pairing link: `paseo pair --json`, take `url` (the macOS desktop app's CLI is at `/Applications/Paseo.app/Contents/Resources/bin/paseo`).
-2. Add an entry to `~/.paseo/peers.json` on every machine (`name`, `label`, `serverId`, `pairing`; format in the repo's `peers.example.json`) and keep it chmod 600. Pass links only through the user or another trusted channel.
-3. Each machine maintains its own peers.json; it never goes into a repository.
+A new machine follows steps 3–6 of "First-time setup". If a machine's link stops working (reinstall, re-pairing), run `init` again on that machine, then `invite` it to the others to `join` (entries with the same serverId are replaced). Each machine maintains its own peers.json; it never goes into a repository.

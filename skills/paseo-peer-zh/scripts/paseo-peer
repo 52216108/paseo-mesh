@@ -6,8 +6,14 @@
 # See peers.example.json in the repo for the format.
 #
 # Usage:
+#   paseo-peer init [--name N] [--label L]       Register this machine in peers.json (its own pairing link is read locally)
+#   paseo-peer invite [--print]                  Put this machine's join code on the clipboard (not shown)
+#   paseo-peer join [--stdin] [--name N]         Add another machine from its join code (clipboard, or hidden prompt);
+#                                                    connects once to verify before saving
+#   paseo-peer doctor                            Check Paseo version, peers.json, and that every machine is reachable
 #   paseo-peer ls                                  List machines in peers.json (no links), marking this one
-#   paseo-peer <machine> <paseo args…>             Run any paseo command against that machine (<machine> = name or serverId)
+#   paseo-peer <machine> <paseo args…>             Run any paseo command against that machine (<machine> = name, serverId,
+#                                                    or `local` for this machine)
 #   paseo-peer <machine> who [project-dir]         Sessions on that machine working in this project: status, last activity,
 #                                                    title, latest exchange (project-dir defaults to the current dir name)
 #   paseo-peer whoami                              This session's sender line: project + session name + short id
@@ -50,16 +56,26 @@ else SELF_CMD="$SCRIPT_DIR/$(basename "$src")"; SELF_CMD="${SELF_CMD/#"$HOME"/\~
 fi
 SELF_ID="$(cat "$HOME/.paseo/server-id" 2>/dev/null || true)"
 
-[ -f "$PEERS" ] || { t "没有机器清单 $PEERS（格式见仓库里的 peers.example.json）" "No machine list at $PEERS (see peers.example.json in the repo)" >&2; echo >&2; exit 1; }
-# peers.json holds pairing links (keys to the other machines): refuse to run if group/others can read it
-perm="$(stat -c %a "$PEERS" 2>/dev/null || stat -f %Lp "$PEERS")"
-case "$perm" in
+# Setup commands live in paseo-peer-admin.mjs (they handle pairing links, so they never put them in argv)
+case "${1:-}" in
+  init|invite|join|doctor)
+    PASEO="$PASEO" PEERS="$PEERS" LANG_UI="$LANG_UI" SELF_CMD="$SELF_CMD" exec node "$SCRIPT_DIR/paseo-peer-admin.mjs" "$@" ;;
+esac
+
+# peers.json is optional: without it only this machine (`local`) is reachable, which is enough for cross-project work
+HAVE_PEERS=0
+if [ -f "$PEERS" ]; then
+  HAVE_PEERS=1
+  # peers.json holds pairing links (keys to the other machines): refuse to run if group/others can read it
+  perm="$(stat -c %a "$PEERS" 2>/dev/null || stat -f %Lp "$PEERS")"
+  case "$perm" in
   *00) ;;
-  *) t "$PEERS 的权限是 $perm，其他用户可读；里面的配对链接是钥匙，请先 chmod 600 $PEERS" \
+  *) t "$PEERS 的权限是 ${perm}，其他用户可读；里面的配对链接是钥匙，请先 chmod 600 $PEERS" \
        "$PEERS has mode $perm and is readable by others; it holds pairing links (keys) — run: chmod 600 $PEERS" >&2
      echo >&2; exit 1 ;;
-esac
-[ $# -ge 1 ] || { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+  esac
+fi
+[ $# -ge 1 ] || { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 # This session's sender line. Project name = the Paseo project (as shown in the sidebar) whose path contains the
 # session's cwd; falls back to the directory name. Mode "project" prints just the project name.
@@ -84,6 +100,7 @@ self_desc() {
 
 # This machine's `name` (e.g. office) or `label` (e.g. "Office iMac") from peers.json
 self_machine() {
+  if [ "$HAVE_PEERS" = 0 ]; then [ "$1" = name ] && echo local || hostname -s; return; fi
   node -e '
     const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
     console.log(d.machines.find((x) => x.serverId === process.argv[2])?.[process.argv[3]] ?? "")
@@ -101,6 +118,7 @@ if [ "$1" = whoami ]; then
 fi
 
 if [ "$1" = ls ]; then
+  if [ "$HAVE_PEERS" = 0 ]; then t "还没有机器清单；只有本机（local）。要跨机器，运行 paseo-peer init" "No machine list yet; only this machine (local). For cross-machine, run paseo-peer init"; echo; exit 0; fi
   node -e '
     const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
     const mark = process.argv[3] === "zh" ? "  ← 本机" : "  ← this machine"
@@ -110,6 +128,14 @@ if [ "$1" = ls ]; then
 fi
 
 target="$1"; shift
+if [ "$target" = local ] || { [ "$HAVE_PEERS" = 0 ] && [ "$target" = "$(self_machine name)" ]; }; then
+  info="$SELF_ID
+"
+elif [ "$HAVE_PEERS" = 0 ]; then
+  t "没有机器清单 ${PEERS}，只能用 local（本机）。要跨机器，先运行 paseo-peer init 并 invite / join" \
+    "No machine list at $PEERS; only \"local\" works. For cross-machine, run paseo-peer init, then invite / join" >&2
+  echo >&2; exit 1
+else
 # Prints two lines: serverId, pairing link
 info="$(node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
@@ -121,6 +147,7 @@ info="$(node -e '
   }
   console.log(m.serverId); console.log(m.pairing)
 ' "$PEERS" "$target" "$LANG_UI")"
+fi
 server_id="$(printf '%s\n' "$info" | sed -n 1p)"
 pairing="$(printf '%s\n' "$info" | sed -n 2p)"
 

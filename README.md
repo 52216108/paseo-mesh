@@ -44,33 +44,38 @@ paseo-mesh 是两个 Agent Skill 加一个小脚本，补上的就是这块：**
 - PATH 里有 `bash` 和 `node`
 - macOS 或 Linux；Paseo CLI 在 PATH 里，或使用 macOS 桌面版自带的 `/Applications/Paseo.app/Contents/Resources/bin/paseo`
 
-## 安装
+## 快速开始：把这段话发给你的 Agent
 
-1. 在每台机器上安装 skill（中文版）：
+在 Paseo 里开一个会话，把下面这段原样发过去，它会一步步带你配置；要跨机器的话，另一台机器上也发一次：
+
+```text
+请帮我配置 paseo-mesh（https://github.com/52216108/paseo-mesh），让我的 Paseo 会话能跨项目、跨机器协作：
+1. 确认本机有 Paseo 0.12.0+ 和 node；
+2. 安装中文版 skill：npx skills add 52216108/paseo-mesh -g -s paseo-peer-zh -s paseo-cross-project-zh -y
+   然后建链接 mkdir -p ~/.local/bin && ln -sf ~/.claude/skills/paseo-peer-zh/scripts/paseo-peer ~/.local/bin/paseo-peer
+   （skill 实际装在别处的话按实际路径链接；确认 ~/.local/bin 在 PATH 里）；
+3. 读 skill paseo-peer-zh 的「首次配置」一节，按它一步步引导我：问我要不要跨机器、本机叫什么名字，帮我 init、invite / join，最后 paseo-peer doctor 全部通过。
+配对链接和加入码是钥匙，不要让我贴进对话。
+```
+
+### 手动安装
+
+1. 每台机器安装 skill（英文版把名字换成 `paseo-peer`、`paseo-cross-project`）：
    ```bash
    npx skills add 52216108/paseo-mesh -g -s paseo-peer-zh -s paseo-cross-project-zh
+   mkdir -p ~/.local/bin && ln -sf ~/.claude/skills/paseo-peer-zh/scripts/paseo-peer ~/.local/bin/paseo-peer
    ```
-   英文版把 skill 名换成 `paseo-peer`、`paseo-cross-project`。
-
-2. 把脚本放进 PATH（可选，推荐；回复命令会因此变短）：
+   只在本机做跨项目协作的话，到这里就够了。
+2. 要跨机器：每台机器登记自己，然后互相交换加入码（每个方向一次）：
    ```bash
-   mkdir -p ~/.local/bin
-   ln -s ~/.claude/skills/paseo-peer-zh/scripts/paseo-peer ~/.local/bin/paseo-peer
+   paseo-peer init --name office --label "公司的 iMac"   # 本机的配对链接脚本自己读取
+   paseo-peer invite                                     # A 上：本机加入码进剪贴板，不显示
+   paseo-peer join                                       # B 上：从剪贴板读入，实际连一次验证后才保存，并清空剪贴板
    ```
-   路径以 `npx skills add` 实际安装的位置为准。
+   剪贴板到不了另一台机器时（没有 Apple 通用剪贴板），在那台机器的终端里运行 `paseo-peer join` 直接粘贴，输入不回显。
+3. 检查：`paseo-peer doctor`（版本、权限、每台机器能否连上），`paseo-peer ls` 列出机器。
 
-3. 在每台机器上写机器清单 `~/.paseo/peers.json`（格式见 [`peers.example.json`](peers.example.json)）：
-   ```bash
-   paseo pair --json          # 在每台机器上取它自己的配对链接（url）和 serverId
-   chmod 600 ~/.paseo/peers.json
-   ```
-   每台机器的清单都要列出所有机器（包括它自己），`name` 是你在命令里用的短名。
-
-4. 试一下：
-   ```bash
-   paseo-peer ls              # 列出机器，标出本机
-   paseo-peer office ls -g    # 看另一台机器上的会话
-   ```
+`~/.paseo/peers.json` 由 init / join 自动维护（权限 600），格式见 [`peers.example.json`](peers.example.json)。
 
 之后在会话里直接说「让公司那台机器上做支付服务的会话看一下这个问题」「让支付服务配合把退款接口打通」，会话就会按 skill 来做。
 
