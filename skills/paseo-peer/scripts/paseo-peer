@@ -77,6 +77,39 @@ if [ -f "$PEERS" ]; then
 fi
 [ $# -ge 1 ] || { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
+# Codex shells may omit PASEO_AGENT_ID. Match the native thread against the local
+# daemon's persisted agents, never cwd/title/activity. Ambiguous or unreadable
+# records fail closed; a remote daemon cannot be identified from local records.
+resolve_self_id() {
+  [ -z "${PASEO_AGENT_ID:-}" ] || return 0
+  [ -n "${CODEX_THREAD_ID:-${CODEX_SESSION_ID:-}}" ] || return 0
+  [ -z "${PASEO_HOST:-}" ] || return 0
+  PASEO_AGENT_ID="$(node -e '
+    const fs = require("fs")
+    const path = require("path")
+    const { CODEX_THREAD_ID: thread, CODEX_SESSION_ID: session, PASEO_HOME: home } = process.env
+    if (thread && session && thread !== session) process.exit(0)
+    const nativeId = thread || session
+    const root = path.join(home || path.join(require("os").homedir(), ".paseo"), "agents")
+    try {
+      const matches = []
+      for (const dir of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!dir.isDirectory()) continue
+        const folder = path.join(root, dir.name)
+        for (const file of fs.readdirSync(folder)) {
+          if (!file.endsWith(".json")) continue
+          const agent = JSON.parse(fs.readFileSync(path.join(folder, file), "utf8"))
+          if (agent.provider === "codex" && agent.persistence?.provider === "codex" &&
+              agent.persistence.sessionId === nativeId) matches.push(agent.id)
+        }
+      }
+      if (matches.length === 1 && typeof matches[0] === "string" && matches[0]) console.log(matches[0])
+    } catch { /* Cannot prove uniqueness: keep the existing non-session behavior. */ }
+  ')" || PASEO_AGENT_ID=""
+  [ -z "$PASEO_AGENT_ID" ] || export PASEO_AGENT_ID
+  return 0
+}
+
 # This session's sender line. Project name = the Paseo project (as shown in the sidebar) whose path contains the
 # session's cwd; falls back to the directory name. Mode "project" prints just the project name.
 self_desc() {
@@ -108,6 +141,7 @@ self_machine() {
 }
 
 if [ "$1" = whoami ]; then
+  resolve_self_id
   if [ "${2:-}" = --labels ]; then
     [ -n "${PASEO_AGENT_ID:-}" ] || { t "不是 Paseo 会话，没有可打的标签" "Not a Paseo session; no labels to print" >&2; echo >&2; exit 1; }
     printf -- '--label collab.by=%s:%s --label collab.from=%s\n' "$(self_machine name)" "${PASEO_AGENT_ID:0:7}" "$(self_desc project)"
@@ -152,6 +186,7 @@ server_id="$(printf '%s\n' "$info" | sed -n 1p)"
 pairing="$(printf '%s\n' "$info" | sed -n 2p)"
 
 if [ "${1:-}" = mine ]; then
+  resolve_self_id
   [ -n "${PASEO_AGENT_ID:-}" ] || { t "不是 Paseo 会话" "Not a Paseo session" >&2; echo >&2; exit 1; }
   set -- ls -g -a --label "collab.by=$(self_machine name):${PASEO_AGENT_ID:0:7}"
 fi
@@ -210,6 +245,7 @@ if [ "${1:-}" = tell ]; then
       'Usage: paseo-peer <machine> tell <agentId> "message"  or  paseo-peer <machine> tell <agentId> --file <path>' >&2
     echo >&2; exit 1
   fi
+  resolve_self_id
   self_name="$(self_machine name)"; self_label="$(self_machine label)"
   machine="${self_label:-${self_name:-$(t 未知机器 "unknown machine")}}"
   me="${PASEO_AGENT_ID:-}"
