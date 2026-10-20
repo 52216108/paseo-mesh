@@ -1,0 +1,17 @@
+{
+  "_note": "Copy to ~/.paseo/peers.json on every machine and chmod 600. A pairing link can drive the agents on that machine: never commit it. / 复制到每台机器的 ~/.paseo/peers.json 并 chmod 600。配对链接等同远程操控那台机器 agent 的钥匙，不要提交进任何仓库。",
+  "machines": [
+    {
+      "name": "office",
+      "label": "Office iMac",
+      "serverId": "srv_xxxxxxxxxxxx",
+      "pairing": "https://app.paseo.sh/#offer=…  (paseo pair --json → url)"
+    },
+    {
+      "name": "home",
+      "label": "Home MacBook",
+      "serverId": "srv_yyyyyyyyyyyy",
+      "pairing": "https://app.paseo.sh/#offer=…"
+    }
+  ]
+}

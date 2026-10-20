@@ -1,0 +1,24 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Script syntax
+        run: bash -n skills/paseo-peer/scripts/paseo-peer
+      - name: shellcheck
+        run: shellcheck -S warning skills/paseo-peer/scripts/paseo-peer
+      - name: zh / en scripts are identical
+        run: cmp skills/paseo-peer/scripts/paseo-peer skills/paseo-peer-zh/scripts/paseo-peer
+      - name: Example config is valid JSON
+        run: node -e 'JSON.parse(require("fs").readFileSync("peers.example.json","utf8"))'
+      - name: Skill names match their directories
+        run: |
+          for f in skills/*/SKILL.md; do
+            dir=$(basename "$(dirname "$f")")
+            name=$(sed -n 's/^name: //p' "$f" | head -1)
+            [ "$dir" = "$name" ] || { echo "$f: name '$name' != dir '$dir'"; exit 1; }
+          done

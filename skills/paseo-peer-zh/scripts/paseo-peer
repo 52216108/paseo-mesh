@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# paseo-peer — let Paseo sessions in different projects and on different machines find and message each other.
+# https://github.com/52216108/paseo-mesh
+#
+# Machine list: ~/.paseo/peers.json (private to this machine, chmod 600, holds pairing links — never commit it).
+# See peers.example.json in the repo for the format.
+#
+# Usage:
+#   paseo-peer ls                                  List machines in peers.json (no links), marking this one
+#   paseo-peer <machine> <paseo args…>             Run any paseo command against that machine (<machine> = name or serverId)
+#   paseo-peer <machine> who [project-dir]         Sessions on that machine working in this project: status, last activity,
+#                                                    title, latest exchange (project-dir defaults to the current dir name)
+#   paseo-peer whoami                              This session's sender line: project + session name + short id
+#   paseo-peer whoami --labels                     Labels to put on a helper session you start:
+#                                                    --label collab.by=<this machine>:<short id> --label collab.from=<project>
+#   paseo-peer <machine> mine                      Helper sessions this session started on that machine (by label, incl. archived)
+#   paseo-peer <machine> tell <agentId> "message"  Message a session there (preferred). Adds a sender line on top and a reply
+#   paseo-peer <machine> tell <agentId> --file <p>   command at the bottom; steers into a running turn instead of interrupting.
+#                                                    Marked "cross-project" when the target is this machine, else "cross-machine".
+#   paseo-peer <machine> send --no-wait <agentId> "message"   Raw send, no sender line
+#
+# Language of the sender/reply lines: PASEO_PEER_LANG=zh|en; by default zh when installed as a "-zh" skill, else en.
+set -euo pipefail
+
+# Resolve symlinks (e.g. ~/.local/bin/paseo-peer -> …/skills/paseo-peer-zh/scripts/paseo-peer) to find the real skill dir
+src="$0"
+while [ -L "$src" ]; do
+  dir="$(cd "$(dirname "$src")" && pwd)"; src="$(readlink "$src")"
+  case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+SCRIPT_DIR="$(cd "$(dirname "$src")" && pwd -P)"
+SKILL_NAME="$(basename "$(dirname "$SCRIPT_DIR")")"
+case "${PASEO_PEER_LANG:-}" in
+  zh|en) LANG_UI="$PASEO_PEER_LANG" ;;
+  *) case "$SKILL_NAME" in *-zh) LANG_UI=zh ;; *) LANG_UI=en ;; esac ;;
+esac
+# t "<中文>" "<English>"
+t() { if [ "$LANG_UI" = zh ]; then printf '%s' "$1"; else printf '%s' "$2"; fi; }
+
+PEERS="${PASEO_PEERS:-$HOME/.paseo/peers.json}"
+# Paseo CLI: `paseo` on PATH first, then the CLI bundled with the macOS desktop app
+PASEO="$(command -v paseo || true)"
+[ -n "$PASEO" ] || [ ! -x /Applications/Paseo.app/Contents/Resources/bin/paseo ] || PASEO=/Applications/Paseo.app/Contents/Resources/bin/paseo
+[ -n "$PASEO" ] || { t "找不到 Paseo CLI（paseo），请先安装 Paseo 或把 paseo 加进 PATH" "Paseo CLI (paseo) not found; install Paseo or put paseo on PATH" >&2; echo >&2; exit 1; }
+# How the reply line tells the other side to call this script: PASEO_PEER_CMD, else `paseo-peer` if on PATH,
+# else this script's own path (with $HOME shown as ~)
+if [ -n "${PASEO_PEER_CMD:-}" ]; then SELF_CMD="$PASEO_PEER_CMD"
+elif command -v paseo-peer >/dev/null 2>&1; then SELF_CMD=paseo-peer
+else SELF_CMD="$SCRIPT_DIR/$(basename "$src")"; SELF_CMD="${SELF_CMD/#"$HOME"/\~}"
+fi
+SELF_ID="$(cat "$HOME/.paseo/server-id" 2>/dev/null || true)"
+
+[ -f "$PEERS" ] || { t "没有机器清单 $PEERS（格式见仓库里的 peers.example.json）" "No machine list at $PEERS (see peers.example.json in the repo)" >&2; echo >&2; exit 1; }
+[ $# -ge 1 ] || { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+
+# This session's sender line. Project name = the Paseo project (as shown in the sidebar) whose path contains the
+# session's cwd; falls back to the directory name. Mode "project" prints just the project name.
+self_desc() {
+  [ -n "${PASEO_AGENT_ID:-}" ] || { t "不是 Paseo 会话" "not a Paseo session"; echo; return; }
+  node -e '
+    const { execFileSync } = require("child_process")
+    const [paseo, id, mode, lang] = process.argv.slice(1)
+    const run = (args) => { try { return JSON.parse(execFileSync(paseo, args, { encoding: "utf8" })) } catch { return null } }
+    const agent = run(["inspect", id, "--json"]) ?? {}
+    const cwd = agent.Cwd ?? process.cwd()
+    const list = run(["project", "ls", "--json"])
+    const projects = Array.isArray(list) ? list : (list?.projects ?? [])
+    const hit = projects.filter((p) => cwd === p.path || cwd.startsWith(p.path + "/")).sort((a, b) => b.path.length - a.path.length)[0]
+    const project = hit?.name ?? cwd.split("/").pop()
+    const name = agent.Name ?? (lang === "zh" ? "未命名" : "untitled")
+    const short = id.slice(0, 7)
+    if (mode === "project") console.log(project)
+    else console.log(lang === "zh" ? `「${project}」项目的会话「${name}」（id ${short}）` : `session "${name}" in project "${project}" (id ${short})`)
+  ' "$PASEO" "$PASEO_AGENT_ID" "${1:-desc}" "$LANG_UI"
+}
+
+# This machine's `name` (e.g. office) or `label` (e.g. "Office iMac") from peers.json
+self_machine() {
+  node -e '
+    const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
+    console.log(d.machines.find((x) => x.serverId === process.argv[2])?.[process.argv[3]] ?? "")
+  ' "$PEERS" "$SELF_ID" "$1"
+}
+
+if [ "$1" = whoami ]; then
+  if [ "${2:-}" = --labels ]; then
+    [ -n "${PASEO_AGENT_ID:-}" ] || { t "不是 Paseo 会话，没有可打的标签" "Not a Paseo session; no labels to print" >&2; echo >&2; exit 1; }
+    printf -- '--label collab.by=%s:%s --label collab.from=%s\n' "$(self_machine name)" "${PASEO_AGENT_ID:0:7}" "$(self_desc project)"
+  else
+    self_desc
+  fi
+  exit 0
+fi
+
+if [ "$1" = ls ]; then
+  node -e '
+    const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
+    const mark = process.argv[3] === "zh" ? "  ← 本机" : "  ← this machine"
+    for (const m of d.machines) console.log(`${m.name.padEnd(10)} ${m.serverId}  ${m.label}${m.serverId === process.argv[2] ? mark : ""}`)
+  ' "$PEERS" "$SELF_ID" "$LANG_UI"
+  exit 0
+fi
+
+target="$1"; shift
+# Prints two lines: serverId, pairing link
+info="$(node -e '
+  const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
+  const m = d.machines.find((x) => x.name === process.argv[2] || x.serverId === process.argv[2])
+  if (!m) {
+    const names = d.machines.map((x) => x.name).join(", ")
+    console.error(process.argv[3] === "zh" ? `清单里没有「${process.argv[2]}」，可选：${names}` : `No machine "${process.argv[2]}" in peers.json; known: ${names}`)
+    process.exit(1)
+  }
+  console.log(m.serverId); console.log(m.pairing)
+' "$PEERS" "$target" "$LANG_UI")"
+server_id="$(printf '%s\n' "$info" | sed -n 1p)"
+pairing="$(printf '%s\n' "$info" | sed -n 2p)"
+
+if [ "${1:-}" = mine ]; then
+  [ -n "${PASEO_AGENT_ID:-}" ] || { t "不是 Paseo 会话" "Not a Paseo session" >&2; echo >&2; exit 1; }
+  set -- ls -g -a --label "collab.by=$(self_machine name):${PASEO_AGENT_ID:0:7}"
+fi
+
+if [ "${1:-}" = who ]; then
+  project="${2:-$(basename "$PWD")}"
+  host=""
+  [ "$server_id" = "$SELF_ID" ] || host="$pairing"
+  exec node -e '
+    const { execFileSync } = require("child_process")
+    const [paseo, project, hostUrl, lang] = process.argv.slice(1)
+    const zh = lang === "zh"
+    const run = (args) => execFileSync(paseo, [...(hostUrl ? ["--host", hostUrl] : []), ...args], { encoding: "utf8", maxBuffer: 64 << 20 })
+    const agents = JSON.parse(run(["ls", "-g", "--json"])).filter((a) => a.cwd.split("/").pop() === project)
+    if (!agents.length) { console.log(zh ? `那台机器上没有在 ${project} 目录下的会话` : `No sessions in a "${project}" directory on that machine`); process.exit(0) }
+    const ago = (t) => {
+      const m = Math.round((Date.now() - Date.parse(t)) / 60000)
+      if (m < 60) return zh ? `${m} 分钟前` : `${m}m ago`
+      if (m < 1440) return zh ? `${Math.round(m / 60)} 小时前` : `${Math.round(m / 60)}h ago`
+      return zh ? `${Math.round(m / 1440)} 天前` : `${Math.round(m / 1440)}d ago`
+    }
+    const rows = agents.map((a) => {
+      let updated = a.created, last = ""
+      try { updated = JSON.parse(run(["inspect", a.id, "--json"])).UpdatedAt ?? updated } catch {}
+      // Latest few text entries minus internal reasoning ([Thought], may span lines until the next [Tag] entry):
+      // what the user last asked and what the session last answered
+      try {
+        let skip = false
+        last = run(["logs", a.id, "--tail", "6", "--filter", "text"]).split("\n").filter((l) => {
+          const tag = /^\[[A-Za-z][A-Za-z ]*\]/.exec(l)
+          if (tag) skip = tag[0] === "[Thought]"
+          return !skip
+        }).join(" ").replace(/\s+/g, " ").trim().slice(-300)
+      } catch {}
+      return { ...a, updated, last }
+    }).sort((x, y) => Date.parse(y.updated) - Date.parse(x.updated))
+    for (const r of rows) {
+      console.log(`${r.shortId}  ${r.status.padEnd(8)} ${ago(r.updated)}  ${r.name}`)
+      if (r.last) console.log(`    ${zh ? "最近" : "latest"}: …${r.last}`)
+    }
+  ' "$PASEO" "$project" "$host" "$LANG_UI"
+fi
+
+if [ "${1:-}" = tell ]; then
+  if [ $# -eq 4 ] && [ "$3" = --file ]; then
+    [ -f "$4" ] || { t "找不到消息文件 $4" "Message file not found: $4" >&2; echo >&2; exit 1; }
+    to="$2"; msg="$(cat "$4")"
+  elif [ $# -eq 3 ]; then
+    to="$2"; msg="$3"
+  else
+    t '用法：paseo-peer <机器> tell <agentId> "消息"  或  paseo-peer <机器> tell <agentId> --file <路径>' \
+      'Usage: paseo-peer <machine> tell <agentId> "message"  or  paseo-peer <machine> tell <agentId> --file <path>' >&2
+    echo >&2; exit 1
+  fi
+  self_name="$(self_machine name)"; self_label="$(self_machine label)"
+  machine="${self_label:-${self_name:-$(t 未知机器 "unknown machine")}}"
+  me="${PASEO_AGENT_ID:-}"
+  if [ "$server_id" = "$SELF_ID" ]; then
+    header="$(t "【跨项目消息】来自$(self_desc)" "[Cross-project message] From $(self_desc)")"
+  else
+    header="$(t "【跨机器消息】来自 ${machine} 上$(self_desc)" "[Cross-machine message] From $(self_desc) on ${machine}")"
+  fi
+  if [ -n "$me" ] && [ -n "$self_name" ]; then
+    reply="$(t "（回复请运行：${SELF_CMD} ${self_name} tell ${me:0:7} \"回复内容\"，长回复用 --file；用法见 skill ${SKILL_NAME}）" \
+               "(To reply, run: ${SELF_CMD} ${self_name} tell ${me:0:7} \"your reply\" — use --file for long replies; see skill ${SKILL_NAME})")"
+  else
+    reply="$(t "（发送方不是 Paseo 会话，无法直接回复；结果写在你自己的会话里即可）" \
+               "(The sender is not a Paseo session and cannot receive replies; just write the result in your own session.)")"
+  fi
+  # Write the whole message to a temp file and send it with --prompt-file: no argv length or quoting issues
+  tmp="$(mktemp -t paseo-peer-tell.XXXXXX)"
+  trap 'rm -f "$tmp"' EXIT
+  printf '%s\n---\n%s\n---\n%s\n' "$header" "$msg" "$reply" > "$tmp"
+  set -- send --no-wait --behavior steer --prompt-file "$tmp" "$to"
+fi
+
+if [ "$server_id" = "$SELF_ID" ]; then
+  "$PASEO" "$@"
+else
+  "$PASEO" --host "$pairing" "$@"
+fi
