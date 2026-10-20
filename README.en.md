@@ -1,3 +1,5 @@
+![paseo-mesh](docs/images/paseo-mesh-cover.png)
+
 # paseo-mesh
 
 [简体中文](README.md) | **English**
@@ -28,6 +30,18 @@ paseo-mesh is two Agent Skills and a small script that fill exactly that gap: **
 - **Find the sessions you started**: helper sessions get `collab.by` / `collab.from` labels; `paseo-peer <machine> mine` lists them exactly.
 - **Rules for cross-project work**: a dedicated workspace and helper session in the other project, contract first, split of work, compatibility (expand–contract), deploys by each project's own rules, and the initiator verifying and reporting — written down as a skill that sessions follow.
 - **Wait without babysitting**: a reply wakes your session directly; a bounded heartbeat covers the case where the other side forgets to reply.
+
+## Architecture
+
+![Architecture](docs/images/paseo-mesh-architecture.png)
+
+Sessions on the same machine talk through Paseo's built-in MCP tools; across machines, `paseo-peer` reaches the other daemon through the Paseo relay (end-to-end encrypted). The two skills sit on top and define how to find sessions, send messages, and collaborate.
+
+## Collaboration flow
+
+![Collaboration flow](docs/images/paseo-mesh-workflow.png)
+
+One cross-project collaboration: find the other session → start it with labels → settle the contract → message it (with a sender line, steering instead of interrupting) → each side changes its own repository and deploys → the initiator verifies end-to-end and reports. Same-machine work relies on finish notifications; cross-machine work relies on replies, with a bounded heartbeat as a fallback.
 
 ## What's inside
 

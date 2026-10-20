@@ -1,3 +1,5 @@
+![paseo-mesh](docs/images/paseo-mesh-cover.png)
+
 # paseo-mesh
 
 **简体中文** | [English](README.en.md)
@@ -28,6 +30,18 @@ paseo-mesh 是两个 Agent Skill 加一个小脚本，补上的就是这块：**
 - **找得回自己开的会话**：开配合会话时自动打 `collab.by` / `collab.from` 标签，`paseo-peer <机器> mine` 一次精确找回。
 - **跨项目协作的规矩**：在对方项目开专门工作区和配合会话、契约先行、分工、兼容性（扩展-收缩）、部署按各自项目规则、发起方统一核对与汇报——写成 skill，会话照着做。
 - **等回复不空等**：对方回复会直接唤醒你的会话；怕对方忘了回，用有上限的 heartbeat 兜底。
+
+## 系统架构
+
+![系统架构](docs/images/paseo-mesh-architecture.png)
+
+同一台机器上的会话用 Paseo 自带的 MCP 工具直接通信；跨机器时，`paseo-peer` 经 Paseo 中继（端到端加密）连到对方的 daemon。两个 skill 在此之上规定怎么找会话、怎么发消息、怎么协作。
+
+## 协作流程
+
+![协作流程](docs/images/paseo-mesh-workflow.png)
+
+一次跨项目协作：找到对方会话 → 发起并打标签 → 先定契约 → 发消息（带来源、引导不打断）→ 各改各的仓库、各自部署 → 发起方端到端核对后统一汇报。同机靠完成通知，跨机器靠对方回复，必要时用有上限的 heartbeat 兜底。
 
 ## 包含什么
 
