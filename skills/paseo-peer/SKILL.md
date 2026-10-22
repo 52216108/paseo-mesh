@@ -61,6 +61,7 @@ This session's own id is in `PASEO_AGENT_ID`. When the target is this machine's 
 ## Finding the right session
 
 - For "which session is doing X" (who is deploying, who touched a file, who runs a migration), run `find <pattern>` once across all sessions — `local` for this machine; give a pattern in the language the sessions reply in plus the English command word. The session list only has titles and status, so **don't message sessions one by one to ask**.
+- `find` searches only sessions that aren't closed (running and idle) by default, which is fast (a second or two for dozens). If nothing matches, or you're looking for something done earlier, rerun with `-a` to include closed and archived ones (around a minute for hundreds — tell the user you're searching). Each result shows status and last activity: "who is doing it now" means `running` and minutes ago; `idle`/`closed` hours ago is most likely finished work.
 - For sessions you started, just run `mine` (uses the `collab.by` label — no guessing). For anyone else's, run `who` once and use the "latest" part (the user's latest ask + the session's latest reply) to tell who is doing what; don't message sessions one by one to ask.
 - If that's not enough, read candidates with `logs --tail 40`; still unsure — ask the user rather than guess.
 - Follow handoff chains to the end: if a latest reply says "handed off to xxx", go to that session.
