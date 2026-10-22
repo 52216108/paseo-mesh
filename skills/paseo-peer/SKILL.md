@@ -1,6 +1,6 @@
 ---
 name: paseo-peer
-description: Work with Paseo sessions on another machine — see which sessions exist, read their progress, message them, reply, or start a session there. Use when the user mentions another machine, cross-machine work, asking a session over there to do something, or when a message starts with [Cross-machine message] / [Cross-project message] / 【跨机器消息】 / 【跨项目消息】.
+description: Work with other Paseo sessions, on this machine or another — find which session is doing something, read progress, message them, reply, or start a session there. Use when the user asks "which session is doing X / who is deploying / what is the other session up to" (this machine counts too), mentions another machine, cross-machine work, asking a session over there to do something, or when a message starts with [Cross-machine message] / [Cross-project message] / 【跨机器消息】 / 【跨项目消息】.
 ---
 
 # Cross-machine collaboration (paseo-peer)
@@ -36,6 +36,7 @@ Same-machine cross-project work needs no setup; only cross-machine work needs th
 ```bash
 paseo-peer doctor                              # health check: version, permissions, every machine reachable
 paseo-peer ls                                  # all machines, this one marked (this machine is also `local`)
+paseo-peer local find deploy migrate          # which sessions are doing this: search every live session's recent messages and commands on this machine (any pattern matches, regex allowed; -a includes closed ones)
 paseo-peer office who [project-dir]            # sessions there in this project: status, last activity, title, latest exchange (defaults to current dir name)
 paseo-peer office ls -g                        # every session there (title, cwd, status only)
 paseo-peer office logs <agentId> --tail 40     # read its progress (save long output to a file first)
@@ -59,6 +60,7 @@ This session's own id is in `PASEO_AGENT_ID`. When the target is this machine's 
 
 ## Finding the right session
 
+- For "which session is doing X" (who is deploying, who touched a file, who runs a migration), run `find <pattern>` once across all sessions — `local` for this machine; give a pattern in the language the sessions reply in plus the English command word. The session list only has titles and status, so **don't message sessions one by one to ask**.
 - For sessions you started, just run `mine` (uses the `collab.by` label — no guessing). For anyone else's, run `who` once and use the "latest" part (the user's latest ask + the session's latest reply) to tell who is doing what; don't message sessions one by one to ask.
 - If that's not enough, read candidates with `logs --tail 40`; still unsure — ask the user rather than guess.
 - Follow handoff chains to the end: if a latest reply says "handed off to xxx", go to that session.

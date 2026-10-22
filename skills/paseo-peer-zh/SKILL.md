@@ -1,6 +1,6 @@
 ---
 name: paseo-peer-zh
-description: 和另一台机器上的 Paseo 会话协作：看对方有哪些会话、读进度、发消息、回复、在那边新开会话。用户提到另一台机器、跨机器、让那边的会话做什么，或收到以【跨机器消息】/【跨项目消息】/[Cross-machine message]/[Cross-project message] 开头的消息时使用。
+description: 和其他 Paseo 会话协作（本机或另一台机器）：查哪个会话在做某件事、看进度、发消息、回复、在那边新开会话。用户问「哪个会话在做 X / 谁在部署 / 隔壁在干什么」（本机也算），或提到另一台机器、跨机器、让那边的会话做什么，或收到以【跨机器消息】/【跨项目消息】/[Cross-machine message]/[Cross-project message] 开头的消息时使用。
 ---
 
 # 跨机器协作（paseo-peer-zh）
@@ -36,6 +36,7 @@ description: 和另一台机器上的 Paseo 会话协作：看对方有哪些会
 ```bash
 paseo-peer doctor                              # 体检：版本、权限、每台机器能否连上
 paseo-peer ls                                  # 全部机器，标出本机（本机也可以写 local）
+paseo-peer local find 部署 deploy               # 哪些会话在做这件事：搜本机全部活跃会话最近的消息和执行的命令（多个关键词任一命中，支持正则；-a 连已关闭的一起搜）
 paseo-peer office who [项目目录名]               # 对方机器上做这个项目的会话：状态、最近活动、标题、最近的要求与回复（默认取当前目录名）
 paseo-peer office ls -g                        # 对方全部会话（只有标题、cwd、状态）
 paseo-peer office logs <agentId> --tail 40     # 读对方进度（长输出先存文件再看）
@@ -59,6 +60,7 @@ paseo-peer office agent update <agentId> --name "新会话名"            # 改�
 
 ## 找对的会话
 
+- 问「哪个会话在做 X」（谁在部署、谁动了某个文件、谁在跑迁移）先 `find <关键词>` 一次搜遍，本机用 `local`；关键词中英文各给一个（会话的回复多是中文，执行的命令是英文），如 `find 部署 deploy`。会话列表只有标题和状态，看不出在做什么，**不要逐个发消息去问**。
 - 找自己开过的会话直接 `mine`（靠 `collab.by` 标签，不用猜）；找别人的会话先跑一次 `who`，从「最近」那段（用户最近的要求 + 会话最近的回复）判断谁在做什么、该找谁；不要逐个发消息去问。
 - 看不出来时再对候选会话 `logs --tail 40` 细看；仍不确定就问用户，别猜着发。
 - 交接链要跟到底：最近回复里写了「交接给 xxx / 由 xxx 接手」的，去找接手的那个会话。

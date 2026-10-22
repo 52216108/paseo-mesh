@@ -16,6 +16,8 @@
 #                                                    or `local` for this machine)
 #   paseo-peer <machine> who [project-dir]         Sessions on that machine working in this project: status, last activity,
 #                                                    title, latest exchange (project-dir defaults to the current dir name)
+#   paseo-peer <machine> find <pattern> [-a]       Which sessions there are doing X: search every live session's recent
+#                                                    messages and commands (case-insensitive regex; -a also searches closed ones)
 #   paseo-peer whoami                              This session's sender line: project + session name + short id
 #   paseo-peer whoami --labels                     Labels to put on a helper session you start:
 #                                                    --label collab.by=<this machine>:<short id> --label collab.from=<project>
@@ -232,6 +234,76 @@ if [ "${1:-}" = who ]; then
       if (r.last) console.log(`    ${zh ? "最近" : "latest"}: …${r.last}`)
     }
   ' "$PASEO" "$project" "$LANG_UI"
+fi
+
+if [ "${1:-}" = find ]; then
+  shift
+  all=0; pattern=""
+  for a in "$@"; do
+    case "$a" in -a|--all) all=1 ;; *) pattern="${pattern:+$pattern|}$a" ;; esac
+  done
+  [ -n "$pattern" ] || { t '用法：paseo-peer <机器> find <关键词> [-a]   多个关键词任一命中即可，支持正则' \
+    'Usage: paseo-peer <machine> find <pattern> [-a]   any of several patterns matches; regex allowed' >&2; echo >&2; exit 1; }
+  resolve_self_id
+  host=""
+  [ "$server_id" = "$SELF_ID" ] || host="$pairing"
+  PEER_HOST="$host" exec node -e '
+    const { execFile } = require("child_process")
+    const [paseo, pattern, all, self, lang] = process.argv.slice(1)
+    const zh = lang === "zh"
+    const env = { ...process.env }
+    if (env.PEER_HOST) { env.PASEO_HOST = env.PEER_HOST; delete env.PASEO_HOME }
+    delete env.PEER_HOST
+    const run = (args) => new Promise((ok, fail) =>
+      execFile(paseo, args, { encoding: "utf8", maxBuffer: 64 << 20, env }, (e, out) => (e ? fail(e) : ok(out))))
+    let re
+    try { re = new RegExp(pattern, "i") } catch { re = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") }
+    const ago = (t) => {
+      const m = Math.round((Date.now() - Date.parse(t)) / 60000)
+      if (!(m >= 0)) return ""
+      if (m < 60) return zh ? `${m} 分钟前` : `${m}m ago`
+      if (m < 1440) return zh ? `${Math.round(m / 60)} 小时前` : `${Math.round(m / 60)}h ago`
+      return zh ? `${Math.round(m / 1440)} 天前` : `${Math.round(m / 1440)}d ago`
+    }
+    ;(async () => {
+      const agents = JSON.parse(await run(["ls", "-g", "-a", "--json"]))
+        .filter((a) => a.id !== self && (all === "1" || !["closed", "archived"].includes(a.status)))
+      // Line by line over recent messages and tool calls (commands carry the real signal: deploy, migrate, push…).
+      // Skipped: internal reasoning ([Thought], may span lines until the next [Tag]) and whatever follows the first
+      // line of a [User] entry (hook / system context injected into the prompt, not what the user said)
+      const scan = async (a) => {
+        let out = ""
+        try { out = await run(["logs", a.id, "--tail", "200"]) } catch { return null }
+        const hits = []
+        let tag = ""
+        for (const l of out.split("\n")) {
+          const m = /^\[[A-Za-z][A-Za-z ]*\]/.exec(l)
+          if (m) tag = m[0]
+          else if (tag === "[User]") continue
+          if (tag !== "[Thought]" && re.test(l)) hits.push(l.trim())
+        }
+        if (!hits.length) return null
+        let updated = ""
+        try { updated = JSON.parse(await run(["inspect", a.id, "--json"])).UpdatedAt ?? "" } catch {}
+        return { ...a, updated, hits: hits.slice(-3) }
+      }
+      const rows = []
+      for (let i = 0; i < agents.length; i += 6) rows.push(...(await Promise.all(agents.slice(i, i + 6).map(scan))))
+      const found = rows.filter(Boolean).sort((x, y) => (Date.parse(y.updated) || 0) - (Date.parse(x.updated) || 0))
+      if (!found.length) {
+        console.log(zh ? `${agents.length} 个会话最近的记录里都没有「${pattern}」${all === "1" ? "" : "（加 -a 连已关闭的一起搜）"}`
+                       : `No match for "${pattern}" in the recent activity of ${agents.length} sessions${all === "1" ? "" : " (add -a to include closed ones)"}`)
+        return
+      }
+      for (const r of found) {
+        console.log(`${r.shortId}  ${r.status.padEnd(8)} ${ago(r.updated)}  ${r.cwd}  ${r.name}`)
+        for (const h of r.hits) {
+          const i = Math.max(0, h.search(re) - 60)
+          console.log(`    ${i ? "…" : ""}${h.slice(i, i + 200)}`)
+        }
+      }
+    })()
+  ' "$PASEO" "$pattern" "$all" "${PASEO_AGENT_ID:-}" "$LANG_UI"
 fi
 
 if [ "${1:-}" = tell ]; then

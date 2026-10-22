@@ -29,6 +29,7 @@ paseo-mesh is two Agent Skills and a small script that fill exactly that gap: **
   ```
   The project name is the one in Paseo's sidebar and the session name is the sender's current name, so renames show up immediately. Same-machine messages are marked `[Cross-project message]`.
 - **No interruptions**: messages steer into the recipient's current turn instead of interrupting it (Paseo 0.12.0+).
+- **See who is doing what in one go**: `paseo-peer <machine> find deploy` searches every session's recent messages and commands — no messaging sessions one by one to ask.
 - **Find the sessions you started**: helper sessions get `collab.by` / `collab.from` labels; `paseo-peer <machine> mine` lists them exactly.
 - **Rules for cross-project work**: a dedicated workspace and helper session in the other project, contract first, split of work, compatibility (expand–contract), deploys by each project's own rules, and the initiator verifying and reporting — written down as a skill that sessions follow.
 - **Wait without babysitting**: a reply wakes your session directly; a bounded heartbeat covers the case where the other side forgets to reply.
