@@ -16,8 +16,9 @@
 #                                                    or `local` for this machine)
 #   paseo-peer <machine> who [project-dir]         Sessions on that machine working in this project: status, last activity,
 #                                                    title, latest exchange (project-dir defaults to the current dir name)
-#   paseo-peer <machine> find <pattern> [-a]       Which sessions there are doing X: search every live session's recent
-#                                                    messages and commands (case-insensitive regex; -a also searches closed ones)
+#   paseo-peer <machine> find <pattern> [-a] [--days N]   Which sessions there are doing X: search every live session's
+#                                                    recent messages and commands (case-insensitive regex; -a also searches
+#                                                    closed/archived ones; --days N skips sessions idle longer, this machine only)
 #   paseo-peer whoami                              This session's sender line: project + session name + short id
 #   paseo-peer whoami --labels                     Labels to put on a helper session you start:
 #                                                    --label collab.by=<this machine>:<short id> --label collab.from=<project>
@@ -238,19 +239,27 @@ fi
 
 if [ "${1:-}" = find ]; then
   shift
-  all=0; pattern=""
-  for a in "$@"; do
-    case "$a" in -a|--all) all=1 ;; *) pattern="${pattern:+$pattern|}$a" ;; esac
+  all=0; days=""; pattern=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -a|--all) all=1 ;;
+      --days) days="${2:-}"; shift ;;
+      *) pattern="${pattern:+$pattern|}$1" ;;
+    esac
+    shift
   done
-  [ -n "$pattern" ] || { t '用法：paseo-peer <机器> find <关键词> [-a]   多个关键词任一命中即可，支持正则' \
-    'Usage: paseo-peer <machine> find <pattern> [-a]   any of several patterns matches; regex allowed' >&2; echo >&2; exit 1; }
+  case "$days" in *[!0-9]*) pattern="" ;; esac
+  [ -n "$pattern" ] || { t '用法：paseo-peer <机器> find <关键词> [-a] [--days 天数]   多个关键词任一命中即可，支持正则' \
+    'Usage: paseo-peer <machine> find <pattern> [-a] [--days N]   any of several patterns matches; regex allowed' >&2; echo >&2; exit 1; }
   resolve_self_id
   host=""
   [ "$server_id" = "$SELF_ID" ] || host="$pairing"
   PEER_HOST="$host" exec node -e '
     const { execFile } = require("child_process")
-    const [paseo, pattern, all, self, lang] = process.argv.slice(1)
+    const fs = require("fs"), os = require("os"), path = require("path")
+    const [paseo, pattern, all, self, lang, days] = process.argv.slice(1)
     const zh = lang === "zh"
+    const remote = !!process.env.PEER_HOST
     const env = { ...process.env }
     if (env.PEER_HOST) { env.PASEO_HOST = env.PEER_HOST; delete env.PASEO_HOME }
     delete env.PEER_HOST
@@ -266,8 +275,32 @@ if [ "${1:-}" = find ]; then
       return zh ? `${Math.round(m / 1440)} 天前` : `${Math.round(m / 1440)}d ago`
     }
     ;(async () => {
+      // This machine: the daemon agent records give last activity and archive time for free, so sessions can be
+      // sorted and filtered by age without one inspect call each. Another machine: no such shortcut.
+      const rec = new Map()
+      if (!remote) {
+        const root = path.join(process.env.PASEO_HOME || path.join(os.homedir(), ".paseo"), "agents")
+        try {
+          for (const dir of fs.readdirSync(root, { withFileTypes: true })) {
+            if (!dir.isDirectory()) continue
+            for (const file of fs.readdirSync(path.join(root, dir.name))) {
+              if (!file.endsWith(".json")) continue
+              try {
+                const r = JSON.parse(fs.readFileSync(path.join(root, dir.name, file), "utf8"))
+                rec.set(r.id, { updated: r.lastActivityAt || r.updatedAt || "", archived: !!r.archivedAt })
+              } catch {}
+            }
+          }
+        } catch {}
+      } else if (days) {
+        console.error(zh ? "（--days 只对本机生效，这次搜全部）" : "(--days only works on this machine; searching all)")
+      }
+      const cutoff = days && !remote ? Date.now() - Number(days) * 86400000 : 0
       const agents = JSON.parse(await run(["ls", "-g", "-a", "--json"]))
+        .map((a) => ({ ...a, updated: rec.get(a.id)?.updated ?? "", status: rec.get(a.id)?.archived ? "archived" : a.status }))
         .filter((a) => a.id !== self && (all === "1" || !["closed", "archived"].includes(a.status)))
+        .filter((a) => !cutoff || !a.updated || Date.parse(a.updated) >= cutoff)
+        .sort((x, y) => (Date.parse(y.updated) || 0) - (Date.parse(x.updated) || 0))
       // Line by line over recent messages and tool calls (commands carry the real signal: deploy, migrate, push…).
       // Skipped: internal reasoning ([Thought], may span lines until the next [Tag]) and whatever follows the first
       // line of a [User] entry (hook / system context injected into the prompt, not what the user said)
@@ -283,16 +316,19 @@ if [ "${1:-}" = find ]; then
           if (tag !== "[Thought]" && re.test(l)) hits.push(l.trim())
         }
         if (!hits.length) return null
-        let updated = ""
-        try { updated = JSON.parse(await run(["inspect", a.id, "--json"])).UpdatedAt ?? "" } catch {}
+        let updated = a.updated
+        if (!updated) try { updated = JSON.parse(await run(["inspect", a.id, "--json"])).UpdatedAt ?? "" } catch {}
         return { ...a, updated, hits: hits.slice(-3) }
       }
+      // Each scan spawns the paseo CLI, so its startup is the cost: keep one per core busy
       const rows = []
-      for (let i = 0; i < agents.length; i += 6) rows.push(...(await Promise.all(agents.slice(i, i + 6).map(scan))))
+      let next = 0
+      const worker = async () => { while (next < agents.length) { const i = next++; rows[i] = await scan(agents[i]) } }
+      await Promise.all(Array.from({ length: Math.min(16, os.cpus().length || 4) }, worker))
       const found = rows.filter(Boolean).sort((x, y) => (Date.parse(y.updated) || 0) - (Date.parse(x.updated) || 0))
       if (!found.length) {
-        console.log(zh ? `${agents.length} 个会话最近的记录里都没有「${pattern}」${all === "1" ? "" : "（加 -a 连已关闭的一起搜）"}`
-                       : `No match for "${pattern}" in the recent activity of ${agents.length} sessions${all === "1" ? "" : " (add -a to include closed ones)"}`)
+        console.log(zh ? `${agents.length} 个会话最近的记录里都没有「${pattern}」${all === "1" ? "" : "（加 -a 连已关闭的一起搜）"}${cutoff ? `（只搜了最近 ${days} 天有活动的，去掉 --days 搜更早的）` : ""}`
+                       : `No match for "${pattern}" in the recent activity of ${agents.length} sessions${all === "1" ? "" : " (add -a to include closed ones)"}${cutoff ? ` (only sessions active in the last ${days} days; drop --days to search older ones)` : ""}`)
         return
       }
       for (const r of found) {
@@ -303,7 +339,7 @@ if [ "${1:-}" = find ]; then
         }
       }
     })()
-  ' "$PASEO" "$pattern" "$all" "${PASEO_AGENT_ID:-}" "$LANG_UI"
+  ' "$PASEO" "$pattern" "$all" "${PASEO_AGENT_ID:-}" "$LANG_UI" "$days"
 fi
 
 if [ "${1:-}" = tell ]; then
