@@ -55,6 +55,13 @@ paseo-mesh 是两个 Agent Skill 加一个小脚本，补上的就是这块：**
 
 中英两套功能相同，按你的语言装一套即可；两种语言的消息标记双方都认，混用也能互通。
 
+另附一个 Paseo 插件 [`plugins/turn-speed`](plugins/turn-speed/OVERVIEW.md)：Claude Code / Codex 每轮结束后在对话末尾显示生成速度（tok/s、输出 token、生成耗时、请求次数）。数据取自 daemon 机器上 CLI 自己的会话日志，只读时间戳和 token 数，不读对话内容、不联网。每台 daemon 各装一次：
+
+```bash
+cd plugins/turn-speed && npm install
+paseo plugin install "$PWD"   # 需先在 Settings → Plugins 打开 Enable plugins
+```
+
 ## 环境要求
 
 - Paseo **0.12.0+**（每台机器），daemon 开启中继（官方中继或[自建中继](https://github.com/getpaseo/paseo/blob/main/public-docs/connectivity.md)）

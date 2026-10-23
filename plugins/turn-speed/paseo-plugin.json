@@ -1,0 +1,8 @@
+{
+  "id": "turn-speed",
+  "name": "Turn speed",
+  "description": "Show tokens per second for each Claude Code and Codex turn",
+  "requirements": {
+    "paseo": ">=0.12.0"
+  }
+}
