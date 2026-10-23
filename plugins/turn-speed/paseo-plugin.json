@@ -2,6 +2,15 @@
   "id": "turn-speed",
   "name": "Turn speed",
   "description": "Show tokens per second for each Claude Code and Codex turn",
+  "media": [
+    "assets/screenshot.png"
+  ],
+  "translations": {
+    "zh-CN": {
+      "name": "回合速度",
+      "description": "每轮 Claude Code / Codex 对话结束后显示生成速度（tok/s）"
+    }
+  },
   "requirements": {
     "paseo": ">=0.12.0"
   }

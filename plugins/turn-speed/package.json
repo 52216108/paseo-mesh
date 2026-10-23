@@ -5,13 +5,15 @@
   "files": [
     "paseo-plugin.json",
     "OVERVIEW.md",
+    "OVERVIEW.*.md",
     "index.client.ts",
     "index.client.tsx",
     "index.server.ts",
     "index.server.tsx",
     "client/",
     "server/",
-    "shared/"
+    "shared/",
+    "assets/"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -26,5 +28,12 @@
     "typescript": "^5.9.3",
     "zod": "^4.4.3"
   },
-  "description": "\u6bcf\u8f6e\u7ed3\u675f\u663e\u793a\u6a21\u578b\u751f\u6210\u901f\u5ea6\uff08tok/s\uff09"
+  "description": "Show tokens per second for each Claude Code and Codex turn",
+  "author": "Gavin Guo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/52216108/paseo-mesh.git",
+    "directory": "plugins/turn-speed"
+  }
 }
