@@ -14,7 +14,7 @@
 
 ## 已知限制
 
-- 只支持 Claude Code 和 Codex。
+- 只支持 Claude Code 和 Codex，且日志须由 daemon 同一台机器上的 CLI 写入。
 - 取消或失败的轮次不显示。
 - 日志格式不是这些 CLI 的稳定接口，CLI 更新后可能暂时不显示，需要等插件更新。
 - 这一行保存在 daemon 内存中，daemon 重启后历史行会消失。

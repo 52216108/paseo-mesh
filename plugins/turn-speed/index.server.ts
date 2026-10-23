@@ -4,7 +4,7 @@ import {
   fileSize,
   findSessionFile,
   providerKind,
-  readFrom,
+  readTurnLog,
   type SessionProvider,
 } from "./server/session-files";
 import { SPEED_ROW_KIND, SPEED_ROW_VERSION, type SpeedRow } from "./shared/speed";
@@ -72,11 +72,11 @@ export default function contribute(server: PluginServerContext) {
       const sameFile = sessionId === turn.sessionId && turn.file !== null;
       const file = sameFile ? turn.file : await findSessionFile(kind, sessionId, event.agent.cwd);
       if (!file) return;
-      const offset = sameFile ? turn.offset : 0;
+      const offset = sameFile ? turn.offset : null;
       let row: SpeedRow | null = null;
       for (const delay of READ_DELAYS_MS) {
         await sleep(delay, signal);
-        row = measure(kind, await readFrom(file, offset), turn.startedAt, endedAt);
+        row = measure(kind, await readTurnLog(file, offset), turn.startedAt, endedAt);
         if (row) break;
       }
       if (!row) return;
@@ -103,6 +103,6 @@ function measure(
   startedAt: number,
   endedAt: number,
 ): SpeedRow | null {
-  const requests = kind === "claude" ? parseClaude(text, startedAt) : parseCodex(text, startedAt);
+  const requests = kind === "claude" ? parseClaude(text) : parseCodex(text);
   return summarize(kind, requests, startedAt, endedAt);
 }

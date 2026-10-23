@@ -5,7 +5,11 @@ import type { SpeedRow } from "../shared/speed";
 
 export type SessionProvider = SpeedRow["provider"];
 
-// 单次最多读取的日志字节数，防止从头读超大会话文件
+// 从本轮开始时的文件位置往前回看的字节数，补上开始位置记录偏晚时漏掉的首个请求
+const LOOKBACK_BYTES = 2 * 1024 * 1024;
+// 不知道本轮开始时的文件位置时，只读文件末尾这么多字节（本轮数据一定在末尾）
+const UNKNOWN_START_READ_BYTES = 8 * 1024 * 1024;
+// 已知起点时的安全上限，防止异常情况下一次读入过大的文件
 const MAX_READ_BYTES = 64 * 1024 * 1024;
 
 const pathCache = new Map<string, string>();
@@ -91,11 +95,14 @@ export async function fileSize(path: string): Promise<number> {
   return (await stat(path)).size;
 }
 
-export async function readFrom(path: string, offset: number): Promise<string> {
+// offset 为 null 表示不知道本轮开始时的文件位置
+export async function readTurnLog(path: string, offset: number | null): Promise<string> {
   const handle = await open(path, "r");
   try {
     const { size } = await handle.stat();
-    const start = Math.max(Math.min(offset, size), size - MAX_READ_BYTES, 0);
+    const from =
+      offset === null ? size - UNKNOWN_START_READ_BYTES : Math.min(offset, size) - LOOKBACK_BYTES;
+    const start = Math.max(from, size - MAX_READ_BYTES, 0);
     const buffer = Buffer.alloc(size - start);
     await handle.read(buffer, 0, buffer.length, start);
     return buffer.toString("utf8");

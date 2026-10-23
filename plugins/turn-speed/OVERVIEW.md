@@ -14,7 +14,7 @@ The plugin reads only timestamps, entry types, message IDs, and token counts fro
 
 ## Known limits
 
-- Only Claude Code and Codex agents are supported.
+- Only Claude Code and Codex agents are supported, and their logs must be written by the CLI on the daemon machine.
 - Canceled or failed turns get no row.
 - The log formats are not stable interfaces of those CLIs; a CLI update can stop the row from appearing until the plugin is updated.
 - Rows live in the daemon's memory and disappear after a daemon restart.
