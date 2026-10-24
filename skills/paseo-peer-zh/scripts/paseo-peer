@@ -385,10 +385,14 @@ if [ "$server_id" = "$SELF_ID" ]; then
   "$PASEO" "$@"
 else
   # Pass the pairing link and password through the environment, not argv (argv is visible to other users via ps).
+  # Shell assignments before exec, not env(1): `env VAR=value` would put the secrets in env's own argv.
   # PASEO_HOME must be unset or the CLI refuses PASEO_HOST.
-  if [ -n "$peer_password" ]; then
-    env -u PASEO_HOME PASEO_HOST="$pairing" PASEO_PASSWORD="$peer_password" "$PASEO" "$@"
-  else
-    env -u PASEO_HOME PASEO_HOST="$pairing" "$PASEO" "$@"
-  fi
+  (
+    unset PASEO_HOME
+    if [ -n "$peer_password" ]; then
+      PASEO_HOST="$pairing" PASEO_PASSWORD="$peer_password" exec "$PASEO" "$@"
+    else
+      PASEO_HOST="$pairing" exec "$PASEO" "$@"
+    fi
+  )
 fi
