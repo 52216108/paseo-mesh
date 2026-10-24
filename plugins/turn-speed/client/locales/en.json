@@ -1,0 +1,11 @@
+{
+  "speed": "⚡ {{tps}} tok/s",
+  "output_one": "{{count, number}} output token",
+  "output_other": "{{count, number}} output tokens",
+  "generated": "generated in {{duration}}",
+  "seconds": "{{seconds}}s",
+  "minutes": "{{minutes}}m {{seconds}}s",
+  "requests_one": "{{count}} request",
+  "requests_other": "{{count}} requests",
+  "a11y": "Generation speed this turn: {{tps}} tokens per second"
+}

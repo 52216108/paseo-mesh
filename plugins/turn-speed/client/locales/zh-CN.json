@@ -1,0 +1,9 @@
+{
+  "speed": "⚡ {{tps}} tok/s",
+  "output_other": "输出 {{count, number}} tokens",
+  "generated": "生成 {{duration}}",
+  "seconds": "{{seconds}} 秒",
+  "minutes": "{{minutes}} 分 {{seconds}} 秒",
+  "requests_other": "{{count}} 次请求",
+  "a11y": "本轮生成速度每秒 {{tps}} 个 token"
+}

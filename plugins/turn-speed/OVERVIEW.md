@@ -7,6 +7,7 @@ After each completed turn, the daemon plugin reads the provider's own local sess
 - Output tokens include thinking and reasoning tokens.
 - Request time includes time to first token, so this is end-to-end speed, not pure decoding speed. Tool execution time is excluded.
 - `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are honored.
+- The row follows the app language (English and Simplified Chinese). Requires Paseo 0.13 or later.
 
 ## What it reads
 

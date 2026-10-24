@@ -1,23 +1,32 @@
-import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
+import { useTranslation, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Text, View } from "react-native";
 import type { SpeedRow } from "../shared/speed";
-
-function formatDuration(ms: number): string {
-  const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)} 秒`;
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes} 分 ${Math.round(seconds - minutes * 60)} 秒`;
-}
+import { messages } from "./messages";
 
 export function SpeedRowView({ item, theme }: PluginTimelineItemProps<SpeedRow>) {
+  const { t, locale } = useTranslation(messages);
   const { tokensPerSecond, outputTokens, generationMs, requests } = item.data;
+  const tps = tokensPerSecond.toFixed(1);
+  const totalSeconds = generationMs / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const duration =
+    minutes > 0
+      ? t("minutes", { minutes, seconds: Math.round(totalSeconds - minutes * 60) })
+      : t("seconds", { seconds: totalSeconds.toFixed(1) });
+  const text = [
+    t("speed", { tps }),
+    t("output", { count: outputTokens }),
+    t("generated", { duration }),
+    t("requests", { count: requests }),
+  ].join(" · ");
   return (
     <View style={{ paddingVertical: 4 }}>
       <Text
-        accessibilityLabel={`本轮生成速度每秒 ${tokensPerSecond} 个 token`}
+        accessibilityLanguage={locale}
+        accessibilityLabel={t("a11y", { tps })}
         style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}
       >
-        {`⚡ ${tokensPerSecond.toFixed(1)} tok/s · 输出 ${outputTokens.toLocaleString("en-US")} tokens · 生成 ${formatDuration(generationMs)} · ${requests} 次请求`}
+        {text}
       </Text>
     </View>
   );
