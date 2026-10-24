@@ -55,12 +55,13 @@ One cross-project collaboration: find the other session → start it with labels
 
 Both sets do the same thing; install the one in your language. Each side understands the other language's message markers, so mixed setups interoperate.
 
-There is also a Paseo plugin, [`plugins/turn-speed`](plugins/turn-speed/OVERVIEW.md): after each Claude Code or Codex turn it shows the generation speed at the end of the turn (tok/s, output tokens, generation time, request count). It reads the CLI's own session logs on the daemon machine, taking only timestamps and token counts; it never reads conversation text and makes no network requests. Install it once per daemon:
+There is also a Paseo plugin, [`plugins/turn-speed`](plugins/turn-speed/OVERVIEW.md): after each Claude Code or Codex turn it shows the generation speed at the end of the turn (tok/s, output tokens, generation time, request count). It parses the CLI's own session logs locally on the daemon machine and keeps only timestamps and token counts; conversation text is never stored and nothing is sent over the network. It is listed in the Paseo plugin registry; install it once per daemon (turn on Settings → Plugins → Enable plugins first):
 
 ```bash
-cd plugins/turn-speed && npm install
-paseo plugin install "$PWD"   # turn on Settings → Plugins → Enable plugins first
+paseo plugin add 52216108/turn-speed
 ```
+
+To hack on it, install the local directory instead: `cd plugins/turn-speed && npm install && paseo plugin install "$PWD"`.
 
 ## Requirements
 

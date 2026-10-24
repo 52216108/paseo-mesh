@@ -10,7 +10,7 @@ After each completed turn, the daemon plugin reads the provider's own local sess
 
 ## What it reads
 
-The plugin reads only timestamps, entry types, message IDs, and token counts from those logs. It does not read or store conversation text, makes no network requests, and writes nothing to disk. The row it adds contains only the numbers above.
+The plugin parses those logs locally and retains only metrics: timestamps, entry types, message IDs, and token counts. The log lines it reads contain conversation text, which is discarded as each line is parsed and is never stored, logged, or sent anywhere. The plugin makes no network requests and writes nothing to disk. The row it adds contains only the numbers above.
 
 ## Known limits
 
