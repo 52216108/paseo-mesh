@@ -27,7 +27,7 @@ Same-machine cross-project work needs no setup; only cross-machine work needs th
 3. If yes, ask for this machine's short name (used in commands, e.g. `office`; lowercase letters, digits, hyphens) and display name (e.g. "Office iMac"), then run `paseo-peer init --name <short> --label "<display>"`. The script reads this machine's own pairing link; the user doesn't provide it.
 4. Ask the user to install the skills on the other machine and give that machine's agent the same setup prompt, so it runs `init` too.
 5. Exchange join codes (once per direction): on A, `paseo-peer invite` (the code goes to the clipboard, not the screen) → once it's on B's clipboard, run `paseo-peer join` on B (it connects once to verify before saving, then clears the clipboard); then the other way round. If the clipboard can't reach the other machine, have the user run `paseo-peer join` themselves in a terminal there and paste (input is hidden).
-6. Run `paseo-peer doctor` on both; done when everything is ✓.
+6. Run `paseo-peer doctor` on both; done when everything is ✓. If doctor says a machine's daemon has a password (since Paseo 0.13 a password-protected daemon requires it over the relay too), have the user run `paseo-peer password <machine>` themselves in a terminal here to enter that daemon's password (hidden, saved to peers.json only after it works); the password never goes into the chat either.
 
 **A join code contains a pairing link (a key)**: never ask the user to paste it into the chat, and don't print it into the chat with `invite --print`. If the user insists on pasting it, warn that it stays in the session transcript and is sent to the model provider.
 
@@ -35,6 +35,7 @@ Same-machine cross-project work needs no setup; only cross-machine work needs th
 
 ```bash
 paseo-peer doctor                              # health check: version, permissions, every machine reachable
+paseo-peer password office                     # save that machine's daemon password (typed by the user in a terminal only)
 paseo-peer ls                                  # all machines, this one marked (this machine is also `local`)
 paseo-peer local find deploy migrate          # which sessions are doing this: search every live session's recent messages and commands on this machine (any pattern matches, regex allowed; -a includes closed and archived ones; --days N only sessions active in the last N days, this machine only)
 paseo-peer office who [project-dir]            # sessions there in this project: status, last activity, title, latest exchange (defaults to current dir name)

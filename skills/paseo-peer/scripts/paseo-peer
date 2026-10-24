@@ -10,6 +10,8 @@
 #   paseo-peer invite [--print]                  Put this machine's join code on the clipboard (not shown)
 #   paseo-peer join [--stdin] [--name N]         Add another machine from its join code (clipboard, or hidden prompt);
 #                                                    connects once to verify before saving
+#   paseo-peer password <machine> [--clear]      Save that machine's daemon password (hidden prompt; checked before saving).
+#                                                    Needed since Paseo 0.13 when the daemon there has a password set
 #   paseo-peer doctor                            Check Paseo version, peers.json, and that every machine is reachable
 #   paseo-peer ls                                  List machines in peers.json (no links), marking this one
 #   paseo-peer <machine> <paseo args…>             Run any paseo command against that machine (<machine> = name, serverId,
@@ -61,7 +63,7 @@ SELF_ID="$(cat "$HOME/.paseo/server-id" 2>/dev/null || true)"
 
 # Setup commands live in paseo-peer-admin.mjs (they handle pairing links, so they never put them in argv)
 case "${1:-}" in
-  init|invite|join|doctor)
+  init|invite|join|password|doctor)
     PASEO="$PASEO" PEERS="$PEERS" LANG_UI="$LANG_UI" SELF_CMD="$SELF_CMD" exec node "$SCRIPT_DIR/paseo-peer-admin.mjs" "$@" ;;
 esac
 
@@ -173,7 +175,7 @@ elif [ "$HAVE_PEERS" = 0 ]; then
     "No machine list at $PEERS; only \"local\" works. For cross-machine, run paseo-peer init, then invite / join" >&2
   echo >&2; exit 1
 else
-# Prints two lines: serverId, pairing link
+# Prints three lines: serverId, pairing link, daemon password (empty when none)
 info="$(node -e '
   const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))
   const m = d.machines.find((x) => x.name === process.argv[2] || x.serverId === process.argv[2])
@@ -182,11 +184,12 @@ info="$(node -e '
     console.error(process.argv[3] === "zh" ? `清单里没有「${process.argv[2]}」，可选：${names}` : `No machine "${process.argv[2]}" in peers.json; known: ${names}`)
     process.exit(1)
   }
-  console.log(m.serverId); console.log(m.pairing)
+  console.log(m.serverId); console.log(m.pairing); console.log(m.password || "")
 ' "$PEERS" "$target" "$LANG_UI")"
 fi
 server_id="$(printf '%s\n' "$info" | sed -n 1p)"
 pairing="$(printf '%s\n' "$info" | sed -n 2p)"
+peer_password="$(printf '%s\n' "$info" | sed -n 3p)"
 
 if [ "${1:-}" = mine ]; then
   resolve_self_id
@@ -198,14 +201,15 @@ if [ "${1:-}" = who ]; then
   project="${2:-$(basename "$PWD")}"
   host=""
   [ "$server_id" = "$SELF_ID" ] || host="$pairing"
-  PEER_HOST="$host" exec node -e '
+  PEER_HOST="$host" PEER_PASSWORD="${host:+$peer_password}" exec node -e '
     const { execFileSync } = require("child_process")
     const [paseo, project, lang] = process.argv.slice(1)
     const zh = lang === "zh"
     // The pairing link arrives via PEER_HOST and goes to paseo as PASEO_HOST — never in argv, where other users could see it
     const env = { ...process.env }
     if (env.PEER_HOST) { env.PASEO_HOST = env.PEER_HOST; delete env.PASEO_HOME }
-    delete env.PEER_HOST
+    if (env.PEER_PASSWORD) env.PASEO_PASSWORD = env.PEER_PASSWORD
+    delete env.PEER_HOST; delete env.PEER_PASSWORD
     const run = (args) => execFileSync(paseo, args, { encoding: "utf8", maxBuffer: 64 << 20, env })
     const agents = JSON.parse(run(["ls", "-g", "--json"])).filter((a) => a.cwd.split("/").pop() === project)
     if (!agents.length) { console.log(zh ? `那台机器上没有在 ${project} 目录下的会话` : `No sessions in a "${project}" directory on that machine`); process.exit(0) }
@@ -254,7 +258,7 @@ if [ "${1:-}" = find ]; then
   resolve_self_id
   host=""
   [ "$server_id" = "$SELF_ID" ] || host="$pairing"
-  PEER_HOST="$host" exec node -e '
+  PEER_HOST="$host" PEER_PASSWORD="${host:+$peer_password}" exec node -e '
     const { execFile } = require("child_process")
     const fs = require("fs"), os = require("os"), path = require("path")
     const [paseo, pattern, all, self, lang, days] = process.argv.slice(1)
@@ -262,7 +266,8 @@ if [ "${1:-}" = find ]; then
     const remote = !!process.env.PEER_HOST
     const env = { ...process.env }
     if (env.PEER_HOST) { env.PASEO_HOST = env.PEER_HOST; delete env.PASEO_HOME }
-    delete env.PEER_HOST
+    if (env.PEER_PASSWORD) env.PASEO_PASSWORD = env.PEER_PASSWORD
+    delete env.PEER_HOST; delete env.PEER_PASSWORD
     const run = (args) => new Promise((ok, fail) =>
       execFile(paseo, args, { encoding: "utf8", maxBuffer: 64 << 20, env }, (e, out) => (e ? fail(e) : ok(out))))
     let re
@@ -379,7 +384,11 @@ fi
 if [ "$server_id" = "$SELF_ID" ]; then
   "$PASEO" "$@"
 else
-  # Pass the pairing link through the environment, not argv (argv is visible to other users via ps).
+  # Pass the pairing link and password through the environment, not argv (argv is visible to other users via ps).
   # PASEO_HOME must be unset or the CLI refuses PASEO_HOST.
-  env -u PASEO_HOME PASEO_HOST="$pairing" "$PASEO" "$@"
+  if [ -n "$peer_password" ]; then
+    env -u PASEO_HOME PASEO_HOST="$pairing" PASEO_PASSWORD="$peer_password" "$PASEO" "$@"
+  else
+    env -u PASEO_HOME PASEO_HOST="$pairing" "$PASEO" "$@"
+  fi
 fi

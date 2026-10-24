@@ -1,7 +1,7 @@
-// paseo-peer setup commands: init / invite / join / doctor
+// paseo-peer setup commands: init / invite / join / password / doctor
 // Invoked by the paseo-peer script with env: PASEO (CLI path), PEERS (peers.json path), LANG_UI (zh|en), SELF_CMD.
-// Pairing links (keys to a machine) only ever live in memory and in peers.json (mode 600):
-// never in argv, never printed unless the user explicitly asks with --print.
+// Pairing links (keys to a machine) and daemon passwords only ever live in memory and in peers.json (mode 600):
+// never in argv, never printed (pairing links only with an explicit --print).
 import { execFileSync, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync, chmodSync, statSync, renameSync } from "node:fs"
 import { hostname } from "node:os"
@@ -19,9 +19,11 @@ const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1
 
 // ---- paseo CLI ----
 // host: pairing link for a remote daemon (passed via PASEO_HOST, not argv), or undefined for local
-function paseoJson(cliArgs, host, timeout = 30000) {
+// password: that daemon's password (passed via PASEO_PASSWORD), required by Paseo 0.13+ when the daemon has one
+function paseoJson(cliArgs, host, timeout = 30000, password) {
   const env = { ...process.env }
   if (host) { env.PASEO_HOST = host; delete env.PASEO_HOME }
+  if (host && password) env.PASEO_PASSWORD = password
   const out = execFileSync(PASEO, [...cliArgs, "--json"], { encoding: "utf8", env, timeout, stdio: ["ignore", "pipe", "pipe"] })
   return JSON.parse(out)
 }
@@ -80,6 +82,23 @@ function clipPaste() {
   const r = spawnSync(CLIP.paste[0], CLIP.paste.slice(1), { encoding: "utf8" })
   return r.status === 0 ? r.stdout : null
 }
+
+// ---- hidden terminal input ----
+// Only works on a real terminal; agents have none, so callers tell them to ask the user instead
+function readHidden(prompt) {
+  process.stdout.write(prompt)
+  const r = spawnSync("bash", ["-c", 'IFS= read -rs line </dev/tty && printf %s "$line"'], { encoding: "utf8", stdio: ["inherit", "pipe", "inherit"] })
+  process.stdout.write("\n")
+  return r.stdout || ""
+}
+// With --json the CLI reports failures as {"error":{"code","message"}} on stderr
+function cliError(e) {
+  const raw = (e.stderr || e.message || "").toString()
+  try { const j = JSON.parse(raw).error; if (j?.message) return { code: j.code || "", message: j.message } } catch {}
+  return { code: "", message: raw.split("\n").find((l) => l.trim()) || raw }
+}
+const errLine = (e) => cliError(e).message
+const needsPassword = (e) => { const { code, message } = cliError(e); return code === "AUTH_REQUIRED" || code === "AUTH_FAILED" || /Password required|rejected the password|Incorrect password/i.test(message) }
 
 // ---- version compare ----
 const atLeast = (v, min) => {
@@ -142,9 +161,7 @@ if (sub === "join") {
     if (!process.stdin.isTTY) die(
       `剪贴板里没有加入码。请在对方机器上运行 ${cmd} invite 复制加入码，把它带到这台机器的剪贴板后再运行 ${cmd} join；或者请用户在这台机器的终端里亲自运行 ${cmd} join 粘贴。`,
       `No join code on the clipboard. Run ${cmd} invite on the other machine, get the code onto this machine's clipboard, then run ${cmd} join again; or ask the user to run ${cmd} join themselves in a terminal here and paste.`)
-    process.stdout.write(t("粘贴另一台机器的加入码（不回显），回车确认：", "Paste the other machine's join code (hidden), then Enter: "))
-    raw = spawnSync("bash", ["-c", 'IFS= read -rs line </dev/tty && printf %s "$line"'], { encoding: "utf8", stdio: ["inherit", "pipe", "inherit"] }).stdout
-    process.stdout.write("\n")
+    raw = readHidden(t("粘贴另一台机器的加入码（不回显），回车确认：", "Paste the other machine's join code (hidden), then Enter: "))
   }
   raw = (raw || "").trim()
   if (!raw.startsWith(PREFIX)) die("这不是 paseo-mesh 加入码（应以 paseo-mesh-join: 开头）", "That is not a paseo-mesh join code (it should start with paseo-mesh-join:)")
@@ -157,14 +174,26 @@ if (sub === "join") {
   if (peer.serverId === selfId) die("这是本机自己的加入码；要到另一台机器上 join", "That's this machine's own join code; run join on the other machine")
 
   // Actually connect through the link and check we reach the machine the code claims
-  let remote
+  let remote, password
   try { remote = paseoJson(["status"], peer.pairing, 45000) }
-  catch (e) { die(`连不上 ${peer.name}（${peer.label}）：${(e.stderr || e.message || "").toString().split("\n")[0]}\n确认那台机器的 Paseo 在运行、中继已开启`,
-                  `Can't reach ${peer.name} (${peer.label}): ${(e.stderr || e.message || "").toString().split("\n")[0]}\nMake sure Paseo is running there with the relay enabled`) }
+  catch (e) {
+    // Paseo 0.13+ requires the daemon password over the relay when that daemon has one
+    if (needsPassword(e) && process.stdin.isTTY) {
+      password = readHidden(t(`${peer.name} 的 daemon 设了密码，请输入（不回显）：`, `${peer.name}'s daemon has a password; enter it (hidden): `))
+      try { remote = paseoJson(["status"], peer.pairing, 45000, password) }
+      catch (e2) { die(`连不上 ${peer.name}：${errLine(e2)}`, `Can't reach ${peer.name}: ${errLine(e2)}`) }
+    } else if (needsPassword(e)) {
+      die(`${peer.name} 的 daemon 设了密码。请用户在这台机器的终端里运行 ${cmd} join（会提示输入密码），或 join 后运行 ${cmd} password ${peer.name}`,
+          `${peer.name}'s daemon has a password. Ask the user to run ${cmd} join in a terminal here (it will prompt for it), or run ${cmd} password ${peer.name} after joining`)
+    } else {
+      die(`连不上 ${peer.name}（${peer.label}）：${errLine(e)}\n确认那台机器的 Paseo 在运行、中继已开启`,
+          `Can't reach ${peer.name} (${peer.label}): ${errLine(e)}\nMake sure Paseo is running there with the relay enabled`)
+    }
+  }
   if (remote.serverId !== peer.serverId) die(`连上的机器 serverId（${remote.serverId}）与加入码（${peer.serverId}）不一致，已放弃写入`,
                                               `Reached serverId ${remote.serverId}, but the code says ${peer.serverId}; nothing written`)
   const d = loadPeers()
-  upsert(d, { name: peer.name, label: peer.label, serverId: peer.serverId, pairing: peer.pairing })
+  upsert(d, { name: peer.name, label: peer.label, serverId: peer.serverId, pairing: peer.pairing, ...(password ? { password } : {}) })
   savePeers(d)
   if (fromClip) clipCopy("") // don't leave the key sitting on the clipboard
   const iKnown = d.machines.some((m) => m.serverId === selfId)
@@ -174,6 +203,34 @@ if (sub === "join") {
   console.log(iKnown
     ? t(`对方也需要知道本机：在本机运行 ${cmd} invite，再到 ${peer.name} 上 join（已做过可忽略）。`, `${peer.name} also needs this machine: run ${cmd} invite here, then join on ${peer.name} (skip if done).`)
     : t(`本机还没登记，先运行 ${cmd} init，再 invite 给 ${peer.name}。`, `This machine isn't registered yet: run ${cmd} init, then invite to ${peer.name}.`))
+  process.exit(0)
+}
+
+if (sub === "password") {
+  const name = args.find((a) => !a.startsWith("--"))
+  if (!name) die(`用法：${cmd} password <机器> [--clear]`, `Usage: ${cmd} password <machine> [--clear]`)
+  const d = loadPeers()
+  const m = d.machines.find((x) => x.name === name || x.serverId === name)
+  if (!m) die(`清单里没有「${name}」`, `No machine "${name}" in peers.json`)
+  if (flag("--clear")) {
+    delete m.password
+    savePeers(d)
+    console.log(t(`已清除 ${m.name} 的 daemon 密码`, `Cleared the daemon password for ${m.name}`))
+    process.exit(0)
+  }
+  if (!process.stdin.isTTY) die(
+    `需要在终端里输入密码。请用户在这台机器的终端里亲自运行 ${cmd} password ${m.name}（输入不回显）；不要把密码贴进 Agent 对话。`,
+    `The password has to be typed in a terminal. Ask the user to run ${cmd} password ${m.name} in a terminal on this machine (input is hidden); don't paste it into an agent chat.`)
+  const password = readHidden(t(`${m.name}（${m.label}）的 daemon 密码（不回显）：`, `Daemon password for ${m.name} (${m.label}) (hidden): `))
+  if (!password) die("没有输入密码，未修改", "No password entered; nothing changed")
+  let remote
+  try { remote = paseoJson(["status"], m.pairing, 45000, password) }
+  catch (e) { die(`用这个密码连不上 ${m.name}：${errLine(e)}；未保存`, `Can't reach ${m.name} with that password: ${errLine(e)}; not saved`) }
+  if (remote.serverId !== m.serverId) die(`连上的是 ${remote.serverId}，清单写的是 ${m.serverId}；未保存`, `Reached ${remote.serverId}, but the list says ${m.serverId}; not saved`)
+  m.password = password
+  savePeers(d)
+  console.log(t(`密码正确，已保存到 ${PEERS}（权限 600）：${m.name}（Paseo ${remote.daemonVersion}）`,
+                `Password works; saved to ${PEERS} (mode 600): ${m.name} (Paseo ${remote.daemonVersion})`))
   process.exit(0)
 }
 
@@ -203,11 +260,15 @@ if (sub === "doctor") {
     if (selfId && !d.machines.some((m) => m.serverId === selfId)) no(`本机不在清单里，运行 ${cmd} init`, `This machine isn't in the list; run ${cmd} init`)
     for (const m of d.machines.filter((x) => x.serverId !== selfId)) {
       try {
-        const r = paseoJson(["status"], m.pairing, 45000)
+        const r = paseoJson(["status"], m.pairing, 45000, m.password)
         if (r.serverId !== m.serverId) no(`${m.name}：连上的是 ${r.serverId}，清单写的是 ${m.serverId}`, `${m.name}: reached ${r.serverId}, list says ${m.serverId}`)
         else if (!atLeast(r.daemonVersion, "0.12.0")) no(`${m.name}（${m.label}）可连，但 Paseo ${r.daemonVersion} 低于 0.12.0`, `${m.name} (${m.label}) reachable, but Paseo ${r.daemonVersion} < 0.12.0`)
         else ok(`${m.name}（${m.label}）可连，Paseo ${r.daemonVersion}`, `${m.name} (${m.label}) reachable, Paseo ${r.daemonVersion}`)
-      } catch (e) { no(`${m.name}（${m.label}）连不上：${(e.stderr || e.message || "").toString().split("\n")[0]}`, `${m.name} (${m.label}) unreachable: ${(e.stderr || e.message || "").toString().split("\n")[0]}`) }
+      } catch (e) {
+        if (needsPassword(e)) no(`${m.name}（${m.label}）的 daemon 设了密码（Paseo 0.13 起中继连接也要密码），请用户在终端里运行 ${cmd} password ${m.name}`,
+                                 `${m.name} (${m.label}) has a daemon password (required over the relay since Paseo 0.13); ask the user to run ${cmd} password ${m.name} in a terminal`)
+        else no(`${m.name}（${m.label}）连不上：${errLine(e)}`, `${m.name} (${m.label}) unreachable: ${errLine(e)}`)
+      }
     }
     if (d.machines.length < 2) console.log("· " + t(`清单里只有本机；另一台机器 init 后，两边互相 invite / join`, `Only this machine is listed; after init on the other machine, invite / join both ways`))
   }

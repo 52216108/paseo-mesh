@@ -27,7 +27,7 @@ description: 和其他 Paseo 会话协作（本机或另一台机器）：查哪
 3. 要的话，问本机的短名（命令里用，如 `office`，小写字母/数字/连字符）和显示名（如「公司的 iMac」），运行 `paseo-peer init --name <短名> --label "<显示名>"`。本机的配对链接脚本自己读取，用户不用提供。
 4. 请用户在另一台机器上也装好 skill，把同一段初始化提示词发给那边的 Agent，让它也完成 `init`。
 5. 交换加入码（每个方向一次）：在 A 上 `paseo-peer invite`（加入码进剪贴板、不显示）→ 加入码到达 B 的剪贴板后，在 B 上 `paseo-peer join`（连一次验证后才写入，并清空剪贴板）；再反过来做一遍。剪贴板到不了另一台机器时，请用户在那台机器的终端里亲自运行 `paseo-peer join` 粘贴（输入不回显）。
-6. 两边都跑 `paseo-peer doctor`，全是 ✓ 才算完成。
+6. 两边都跑 `paseo-peer doctor`，全是 ✓ 才算完成。doctor 提示某台机器「daemon 设了密码」时（Paseo 0.13 起，设了密码的 daemon 走中继也要密码），请用户在本机终端里亲自运行 `paseo-peer password <机器>` 输入那台机器的 daemon 密码（不回显，验证通过才保存进 peers.json）；密码同样不进对话。
 
 **加入码里有配对链接（钥匙）**：绝不让用户把它贴进对话，你也不要用 `invite --print` 把它打到对话里；用户执意要贴时，提醒这会留在会话记录里并发给模型服务。
 
@@ -35,6 +35,7 @@ description: 和其他 Paseo 会话协作（本机或另一台机器）：查哪
 
 ```bash
 paseo-peer doctor                              # 体检：版本、权限、每台机器能否连上
+paseo-peer password office                     # 保存那台机器的 daemon 密码（只能由用户在终端里输入）
 paseo-peer ls                                  # 全部机器，标出本机（本机也可以写 local）
 paseo-peer local find 部署 deploy               # 哪些会话在做这件事：搜本机全部活跃会话最近的消息和执行的命令（多个关键词任一命中，支持正则；-a 连已关闭和已归档的一起搜；--days N 只搜最近 N 天有活动的，仅本机）
 paseo-peer office who [项目目录名]               # 对方机器上做这个项目的会话：状态、最近活动、标题、最近的要求与回复（默认取当前目录名）
