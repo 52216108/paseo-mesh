@@ -1,10 +1,11 @@
-// paseo-peer setup commands: init / invite / join / password / doctor
+// paseo-peer setup commands: init / invite / join / password / link / doctor
 // Invoked by the paseo-peer script with env: PASEO (CLI path), PEERS (peers.json path), LANG_UI (zh|en), SELF_CMD.
 // Pairing links (keys to a machine) and daemon passwords only ever live in memory and in peers.json (mode 600):
 // never in argv, never printed (pairing links only with an explicit --print).
 import { execFileSync, spawnSync } from "node:child_process"
-import { existsSync, readFileSync, writeFileSync, chmodSync, statSync, renameSync } from "node:fs"
-import { hostname } from "node:os"
+import { existsSync, readFileSync, writeFileSync, chmodSync, statSync, renameSync, mkdirSync } from "node:fs"
+import { homedir, hostname } from "node:os"
+import { dirname, join } from "node:path"
 
 const { PASEO, PEERS, LANG_UI, SELF_CMD } = process.env
 const zh = LANG_UI === "zh"
@@ -206,6 +207,110 @@ if (sub === "join") {
   process.exit(0)
 }
 
+// ---- connected hosts (Paseo 0.13+) ----
+// Relay connection string for a peer, with its daemon password when set. Built in memory only.
+function relayConnection(m) {
+  try { return buildRelayConnection(m) }
+  catch { die(`${m.name} 的配对链接无法解析，请在那台机器上重新 invite，再到本机 join`, `Can't parse the pairing link for ${m.name}; run invite on that machine and join here again`) }
+}
+function buildRelayConnection(m) {
+  const hash = new URL(m.pairing).hash
+  let url
+  if (hash.startsWith("#connect=")) {
+    url = new URL(decodeURIComponent(hash.slice("#connect=".length)))
+  } else if (hash.startsWith("#offer=")) {
+    const offer = JSON.parse(Buffer.from(hash.slice("#offer=".length), "base64url").toString("utf8"))
+    url = new URL(`relay://${offer.relay.endpoint}/${encodeURIComponent(offer.serverId)}`)
+    url.searchParams.set("key", offer.daemonPublicKeyB64)
+    if (offer.relay.useTls) url.searchParams.set("ssl", "true")
+    if (offer.minimumSecurityMode) url.searchParams.set("security", offer.minimumSecurityMode)
+  } else {
+    throw new Error("unrecognized pairing link")
+  }
+  url.searchParams.delete("password")
+  if (m.password) url.searchParams.set("password", m.password)
+  return url.toString()
+}
+// The paseo CLI only takes a host connection as an argument (visible in ps), so hosts are added through the
+// official SDK instead, installed once next to peers.json and pinned to this daemon's version.
+async function loadSdk(version) {
+  const dir = join(dirname(PEERS), "paseo-mesh-sdk")
+  const pkg = join(dir, "node_modules", "@getpaseo", "client", "package.json")
+  let have = null
+  try { have = JSON.parse(readFileSync(pkg, "utf8")).version } catch {}
+  if (have !== version) {
+    mkdirSync(dir, { recursive: true })
+    if (!existsSync(join(dir, "package.json"))) writeFileSync(join(dir, "package.json"), '{ "private": true }\n')
+    console.log(t(`首次使用，安装 Paseo SDK ${version} 到 ${dir} …`, `First use: installing Paseo SDK ${version} into ${dir} …`))
+    // --ignore-scripts: no dependency lifecycle scripts run
+    const r = spawnSync("npm", ["install", "--prefix", dir, "--no-audit", "--no-fund", "--silent", "--ignore-scripts", `@getpaseo/client@${version}`], { stdio: ["ignore", "inherit", "inherit"] })
+    if (r.status !== 0) {
+      // e.g. the desktop app updated before that SDK version reached npm: keep using an installed 0.13+ SDK
+      if (have && atLeast(have, "0.13.0")) console.log(t(`装不上 SDK ${version}，沿用已装的 ${have}`, `Couldn't install SDK ${version}; keeping the installed ${have}`))
+      else die(`安装 @getpaseo/client@${version} 失败（需要 npm 和网络）`, `Installing @getpaseo/client@${version} failed (needs npm and network access)`)
+    }
+  }
+  return import(join(dir, "node_modules", "@getpaseo", "client", "dist", "index.js"))
+}
+
+if (sub === "link") {
+  let status
+  try { status = paseoJson(["daemon", "status"]) } catch (e) { die(`读不到本机 Paseo daemon 状态：${errLine(e)}`, `Can't read the local Paseo daemon status: ${errLine(e)}`) }
+  if (!status.listen || !status.daemonVersion) die("本机 Paseo daemon 没在运行，先打开 Paseo", "The local Paseo daemon isn't running; start Paseo first")
+  if (!atLeast(status.daemonVersion, "0.13.0")) die(`本机 Paseo ${status.daemonVersion} 还没有连接主机功能，需要 0.13.0+`, `Paseo ${status.daemonVersion} here has no connected hosts; needs 0.13.0+`)
+  const d = loadPeers()
+  const names = args.filter((a) => !a.startsWith("--"))
+  const targets = d.machines.filter((m) => m.serverId !== status.serverId && (!names.length || names.includes(m.name)))
+  if (!targets.length) die(names.length ? `清单里没有：${names.join(", ")}` : `清单里没有其他机器；先 invite / join`, names.length ? `Not in peers.json: ${names.join(", ")}` : `No other machines in peers.json; invite / join first`)
+  const { createPaseoClient } = await loadSdk(status.daemonVersion)
+  // Same local credential the paseo CLI uses, so a daemon with a password still accepts this local connection
+  let token
+  try { token = readFileSync(join(status.home || process.env.PASEO_HOME || join(homedir(), ".paseo"), "local-credential"), "utf8").trim() } catch {}
+  const client = createPaseoClient({
+    url: `ws://${status.listen}/ws`,
+    reconnect: { enabled: false },
+    ...(token ? { localCredential: () => token } : {}),
+    ...(process.env.PASEO_PASSWORD ? { password: process.env.PASEO_PASSWORD } : {}),
+  })
+  try {
+    try { await client.connect() }
+    catch (e) { die(`连不上本机 Paseo daemon：${e?.message || e}`, `Can't connect to the local Paseo daemon: ${e?.message || e}`) }
+    const { hosts } = await client.hosts.list()
+    for (const m of targets) {
+      const connection = relayConnection(m)
+      const old = hosts.find((h) => h.serverId === m.serverId || (h.metadata?.["paseo-mesh"] === "peer" && h.label === m.name))
+      if (old && old.metadata?.["paseo-mesh"] !== "peer" && old.status === "online") {
+        // Added by the user (e.g. a LAN connection): leave it alone
+        console.log(t(`${m.name} 已是在线的连接主机（不是 paseo-peer 加的），保持不变`, `${m.name} is already an online connected host (not added by paseo-peer); left unchanged`))
+        continue
+      }
+      if (old) await client.hosts.update(old.registrationId, { connection, ...(old.label ? {} : { label: m.name }), metadata: { ...old.metadata, "paseo-mesh": "peer" } })
+      else await client.hosts.add({ connection, label: m.name, metadata: { "paseo-mesh": "peer" } })
+      console.log(t(`${old ? "已更新" : "已添加"}连接主机 ${m.name}（${m.label}）`, `${old ? "Updated" : "Added"} connected host ${m.name} (${m.label})`))
+    }
+    // Registration connects in the background; wait briefly so the result is meaningful
+    const deadline = Date.now() + 30000
+    let rows = []
+    while (Date.now() < deadline) {
+      rows = (await client.hosts.list()).hosts.filter((h) => targets.some((m) => m.serverId === h.serverId || m.name === h.label))
+      if (rows.length >= targets.length && rows.every((h) => h.status === "online" || h.status === "error")) break
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+    let bad = 0
+    for (const m of targets) {
+      const h = rows.find((x) => x.serverId === m.serverId || x.label === m.name)
+      if (h?.status === "online") console.log("✓ " + t(`${m.name} 在线（serverId ${m.serverId}）`, `${m.name} online (serverId ${m.serverId})`))
+      else { bad++; console.log("✗ " + t(`${m.name}：${h?.status || "未登记"}${h?.error ? `，${h.error.message}` : ""}`, `${m.name}: ${h?.status || "not registered"}${h?.error ? `, ${h.error.message}` : ""}`)) }
+    }
+    if (!bad) console.log(t("本机会话现在可以用 Paseo MCP 工具加 serverId 在这些机器上开会话、发消息，并收到完成通知。",
+                            "Sessions here can now use Paseo MCP tools with serverId to start and message sessions on these machines, with finish notifications."))
+    process.exitCode = bad ? 1 : 0
+  } finally {
+    await client.close()
+  }
+  process.exit()
+}
+
 if (sub === "password") {
   const name = args.find((a) => !a.startsWith("--"))
   if (!name) die(`用法：${cmd} password <机器> [--clear]`, `Usage: ${cmd} password <machine> [--clear]`)
@@ -271,6 +376,17 @@ if (sub === "doctor") {
       }
     }
     if (d.machines.length < 2) console.log("· " + t(`清单里只有本机；另一台机器 init 后，两边互相 invite / join`, `Only this machine is listed; after init on the other machine, invite / join both ways`))
+    // Connected hosts (0.13+): what lets sessions here start/message sessions there and get finish notifications
+    let hosts = null
+    try { hosts = paseoJson(["host", "ls"]) } catch {}
+    if (hosts) {
+      for (const m of d.machines.filter((x) => x.serverId !== selfId)) {
+        const h = hosts.find((x) => x.serverId === m.serverId)
+        if (h?.status === "online") ok(`${m.name} 已是本机的连接主机（在线），MCP 工具可用 serverId ${m.serverId}`, `${m.name} is a connected host here (online); MCP tools can use serverId ${m.serverId}`)
+        else if (h) no(`${m.name} 是连接主机，但状态 ${h.status}${h.error ? `：${h.error.message}` : ""}；运行 ${cmd} link ${m.name} 重新登记`, `${m.name} is a connected host but ${h.status}${h.error ? `: ${h.error.message}` : ""}; run ${cmd} link ${m.name}`)
+        else console.log("· " + t(`${m.name} 还不是本机的连接主机：运行 ${cmd} link，本机会话就能用 MCP 在那边开会话并收到完成通知`, `${m.name} isn't a connected host here yet: run ${cmd} link so sessions here can start sessions there via MCP and get finish notifications`))
+      }
+    }
   }
   process.exit(bad ? 1 : 0)
 }

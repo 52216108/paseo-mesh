@@ -32,7 +32,7 @@ paseo-mesh is two Agent Skills and a small script that fill exactly that gap: **
 - **See who is doing what in one go**: `paseo-peer <machine> find deploy` searches every session's recent messages and commands — no messaging sessions one by one to ask.
 - **Find the sessions you started**: helper sessions get `collab.by` / `collab.from` labels; `paseo-peer <machine> mine` lists them exactly.
 - **Rules for cross-project work**: a dedicated workspace and helper session in the other project, contract first, split of work, compatibility (expand–contract), deploys by each project's own rules, and the initiator verifying and reporting — written down as a skill that sessions follow.
-- **Wait without babysitting**: a reply wakes your session directly; a bounded heartbeat covers the case where the other side forgets to reply.
+- **Wait without babysitting**: on Paseo 0.13+, once the other machine is registered as a connected host with `paseo-peer link`, every turn of a session you started there sends a finish notification straight back to your session (with its final reply); without link, a reply wakes your session and a bounded heartbeat covers a forgotten reply.
 
 ## Architecture
 
@@ -44,7 +44,7 @@ Sessions on the same machine talk through Paseo's built-in MCP tools; across mac
 
 ![Collaboration flow](docs/images/paseo-mesh-workflow.png)
 
-One cross-project collaboration: find the other session → start it with labels → settle the contract → message it (with a sender line, steering instead of interrupting) → each side changes its own repository and deploys → the initiator verifies end-to-end and reports. Same-machine work relies on finish notifications; cross-machine work relies on replies, with a bounded heartbeat as a fallback.
+One cross-project collaboration: find the other session → start it with labels → settle the contract → message it (with a sender line, steering instead of interrupting) → each side changes its own repository and deploys → the initiator verifies end-to-end and reports. Same-machine and linked cross-machine work rely on finish notifications; unlinked cross-machine work relies on replies, with a bounded heartbeat as a fallback.
 
 ## What's inside
 
@@ -98,7 +98,9 @@ Pairing links and join codes are keys — don't ask me to paste them into the ch
    paseo-peer join                                       # on B: reads it from the clipboard, connects once to verify, saves, clears the clipboard
    ```
    If the clipboard can't reach the other machine (no Apple Universal Clipboard), run `paseo-peer join` in a terminal there and paste; input is hidden.
-3. Check: `paseo-peer doctor` (version, permissions, every machine reachable); `paseo-peer ls` lists machines.
+3. If a machine's daemon has a password (required over the relay since Paseo 0.13), run `paseo-peer password <machine>` in a terminal once (input is hidden).
+4. When both sides run Paseo 0.13+, run `paseo-peer link` on each to register the other machines as connected hosts; that is what enables cross-machine finish notifications.
+5. Check: `paseo-peer doctor` (version, permissions, every machine reachable, connected-host status); `paseo-peer ls` lists machines.
 
 `~/.paseo/peers.json` is maintained by init / join (mode 600); the format is in [`peers.example.json`](peers.example.json).
 
@@ -125,7 +127,7 @@ Other machines update with `git pull`.
 ## Known limitations
 
 - For cross-machine messages Paseo includes only the sender's id, not its session name, so the sender line at the top of the message is what identifies it.
-- There is no finish notification across machines; rely on the other side's reply, with a heartbeat as a fallback.
+- Cross-machine finish notifications need Paseo 0.13+ on both sides and `paseo-peer link`; a daemon restart on either side or a dropped connection ends pending notifications, so check the other session's status once after one. Without link, rely on the other side's reply with a heartbeat as a fallback.
 - The project name comes from matching the session's directory to a Paseo project; sessions in Paseo-managed worktrees fall back to the worktree directory name.
 - While waiting for a reply, an incoming message can dismiss a multiple-choice question dialog in Claude Code (the skills say to ask in plain text then).
 

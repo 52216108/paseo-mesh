@@ -12,6 +12,8 @@
 #                                                    connects once to verify before saving
 #   paseo-peer password <machine> [--clear]      Save that machine's daemon password (hidden prompt; checked before saving).
 #                                                    Needed since Paseo 0.13 when the daemon there has a password set
+#   paseo-peer link [machine…]                   Register the other machines as connected hosts of this daemon (Paseo 0.13+),
+#                                                    so sessions here can use MCP tools with serverId and get finish notifications
 #   paseo-peer doctor                            Check Paseo version, peers.json, and that every machine is reachable
 #   paseo-peer ls                                  List machines in peers.json (no links), marking this one
 #   paseo-peer <machine> <paseo args…>             Run any paseo command against that machine (<machine> = name, serverId,
@@ -22,6 +24,8 @@
 #                                                    recent messages and commands (case-insensitive regex; -a also searches
 #                                                    closed/archived ones; --days N skips sessions idle longer, this machine only)
 #   paseo-peer whoami                              This session's sender line: project + session name + short id
+#   paseo-peer whoami --header [--remote]          First line for messages sent with MCP tools (same wording as tell;
+#                                                    --remote for another machine)
 #   paseo-peer whoami --labels                     Labels to put on a helper session you start:
 #                                                    --label collab.by=<this machine>:<short id> --label collab.from=<project>
 #   paseo-peer <machine> mine                      Helper sessions this session started on that machine (by label, incl. archived)
@@ -63,7 +67,7 @@ SELF_ID="$(cat "$HOME/.paseo/server-id" 2>/dev/null || true)"
 
 # Setup commands live in paseo-peer-admin.mjs (they handle pairing links, so they never put them in argv)
 case "${1:-}" in
-  init|invite|join|password|doctor)
+  init|invite|join|password|link|doctor)
     PASEO="$PASEO" PEERS="$PEERS" LANG_UI="$LANG_UI" SELF_CMD="$SELF_CMD" exec node "$SCRIPT_DIR/paseo-peer-admin.mjs" "$@" ;;
 esac
 
@@ -150,6 +154,15 @@ if [ "$1" = whoami ]; then
   if [ "${2:-}" = --labels ]; then
     [ -n "${PASEO_AGENT_ID:-}" ] || { t "不是 Paseo 会话，没有可打的标签" "Not a Paseo session; no labels to print" >&2; echo >&2; exit 1; }
     printf -- '--label collab.by=%s:%s --label collab.from=%s\n' "$(self_machine name)" "${PASEO_AGENT_ID:0:7}" "$(self_desc project)"
+  elif [ "${2:-}" = --header ]; then
+    # First line for messages sent with MCP tools (which add no sender line): same wording as tell
+    if [ "${3:-}" = --remote ]; then
+      machine="$(self_machine label)"; machine="${machine:-$(self_machine name)}"
+      t "【跨机器消息】来自 ${machine:-未知机器} 上$(self_desc)" "[Cross-machine message] From $(self_desc) on ${machine:-unknown machine}"
+    else
+      t "【跨项目消息】来自$(self_desc)" "[Cross-project message] From $(self_desc)"
+    fi
+    echo
   else
     self_desc
   fi

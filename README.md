@@ -32,7 +32,7 @@ paseo-mesh 是两个 Agent Skill 加一个小脚本，补上的就是这块：**
 - **一次查清谁在做什么**：`paseo-peer <机器> find 部署 deploy` 搜遍全部会话最近的消息和执行的命令，不用逐个发消息去问。
 - **找得回自己开的会话**：开配合会话时自动打 `collab.by` / `collab.from` 标签，`paseo-peer <机器> mine` 一次精确找回。
 - **跨项目协作的规矩**：在对方项目开专门工作区和配合会话、契约先行、分工、兼容性（扩展-收缩）、部署按各自项目规则、发起方统一核对与汇报——写成 skill，会话照着做。
-- **等回复不空等**：对方回复会直接唤醒你的会话；怕对方忘了回，用有上限的 heartbeat 兜底。
+- **等回复不空等**：Paseo 0.13+ 把另一台机器 `paseo-peer link` 成连接主机后，跨机器开的会话每轮做完，完成通知直接回到你的会话（带对方最后的回复）；没 link 时靠对方回复唤醒你，用有上限的 heartbeat 兜底。
 
 ## 系统架构
 
@@ -44,7 +44,7 @@ paseo-mesh 是两个 Agent Skill 加一个小脚本，补上的就是这块：**
 
 ![协作流程](docs/images/paseo-mesh-workflow.png)
 
-一次跨项目协作：找到对方会话 → 发起并打标签 → 先定契约 → 发消息（带来源、引导不打断）→ 各改各的仓库、各自部署 → 发起方端到端核对后统一汇报。同机靠完成通知，跨机器靠对方回复，必要时用有上限的 heartbeat 兜底。
+一次跨项目协作：找到对方会话 → 发起并打标签 → 先定契约 → 发消息（带来源、引导不打断）→ 各改各的仓库、各自部署 → 发起方端到端核对后统一汇报。同机和已 link 的跨机器都靠完成通知；没 link 的跨机器靠对方回复，必要时用有上限的 heartbeat 兜底。
 
 ## 包含什么
 
@@ -98,7 +98,9 @@ paseo plugin add 52216108/turn-speed
    paseo-peer join                                       # B 上：从剪贴板读入，实际连一次验证后才保存，并清空剪贴板
    ```
    剪贴板到不了另一台机器时（没有 Apple 通用剪贴板），在那台机器的终端里运行 `paseo-peer join` 直接粘贴，输入不回显。
-3. 检查：`paseo-peer doctor`（版本、权限、每台机器能否连上），`paseo-peer ls` 列出机器。
+3. 那台机器的 daemon 设了密码时（Paseo 0.13 起中继连接也要密码），在终端里运行 `paseo-peer password <机器>` 输入一次（不回显）。
+4. 两边都是 Paseo 0.13+ 时，各跑一次 `paseo-peer link`，把其他机器登记成本机的连接主机，跨机器才有完成通知。
+5. 检查：`paseo-peer doctor`（版本、权限、每台机器能否连上、是否已是连接主机），`paseo-peer ls` 列出机器。
 
 `~/.paseo/peers.json` 由 init / join 自动维护（权限 600），格式见 [`peers.example.json`](peers.example.json)。
 
@@ -125,7 +127,7 @@ ln -s ~/projects/paseo-mesh/skills/paseo-cross-project-zh ~/.claude/skills/paseo
 ## 已知限制
 
 - 跨机器发来的消息，Paseo 只带发送方 id、不带会话名，所以来源靠消息开头那一行辨认。
-- 跨机器没有完成通知，靠对方回复或 heartbeat 兜底。
+- 跨机器完成通知需要两边都是 Paseo 0.13+ 且已 `paseo-peer link`；任一边 daemon 重启或两台机器断线时，正在等的通知会丢，需要查一次对方状态。没 link 时靠对方回复或 heartbeat 兜底。
 - 项目名按会话所在目录匹配 Paseo 项目；开在 Paseo 管理的 worktree 里的会话，项目名会退回 worktree 目录名。
 - 等对方回复期间，对方消息进来可能打断 Claude Code 的选择题对话框（skill 里已要求此时用文字提问）。
 

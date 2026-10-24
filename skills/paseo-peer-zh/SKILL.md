@@ -5,7 +5,10 @@ description: 和其他 Paseo 会话协作（本机或另一台机器）：查哪
 
 # 跨机器协作（paseo-peer-zh）
 
-用户的多台机器都跑 Paseo，各台机器上的会话可以互相查看、发消息。本机的 Paseo MCP 工具只连本机 daemon，**跨机器一律用本 skill 目录下的脚本 `scripts/paseo-peer`**（下文写作 `paseo-peer`；没加进 PATH 时用它的完整路径，如 `~/.claude/skills/paseo-peer-zh/scripts/paseo-peer`）。
+用户的多台机器都跑 Paseo，各台机器上的会话可以互相查看、发消息。两条通道：
+
+- **Paseo MCP 工具加 `serverId`（首选，Paseo 0.13+）**：用 `paseo-peer link` 把另一台机器登记成本机 daemon 的「连接主机」后，`create_agent`、`send_agent_prompt`、`get_agent_status`、`get_agent_activity`、`list_agents`、`list_workspaces`、`create_workspace` 加上那台机器的 `serverId`，就在那台机器上执行，对方每轮做完**完成通知会回到你的会话**（带对方最后的回复全文）。见下文「在另一台机器上开会话、发消息」。
+- **本 skill 目录下的脚本 `scripts/paseo-peer`**（下文写作 `paseo-peer`；没加进 PATH 时用完整路径，如 `~/.claude/skills/paseo-peer-zh/scripts/paseo-peer`）：找会话（`find`/`who`/`mine`）、读日志、归档、改名、配置，以及 MCP 走不通时的兜底（`run`/`tell`）。MCP 的归档、取消、改名等工具不支持 `serverId`，这些一律用脚本。
 
 需要另一个项目配合（联调、打通接口、各自部署）时，流程见 skill `paseo-cross-project-zh`；本 skill 只管跨机器怎么连、怎么发。
 
@@ -28,6 +31,7 @@ description: 和其他 Paseo 会话协作（本机或另一台机器）：查哪
 4. 请用户在另一台机器上也装好 skill，把同一段初始化提示词发给那边的 Agent，让它也完成 `init`。
 5. 交换加入码（每个方向一次）：在 A 上 `paseo-peer invite`（加入码进剪贴板、不显示）→ 加入码到达 B 的剪贴板后，在 B 上 `paseo-peer join`（连一次验证后才写入，并清空剪贴板）；再反过来做一遍。剪贴板到不了另一台机器时，请用户在那台机器的终端里亲自运行 `paseo-peer join` 粘贴（输入不回显）。
 6. 两边都跑 `paseo-peer doctor`，全是 ✓ 才算完成。doctor 提示某台机器「daemon 设了密码」时（Paseo 0.13 起，设了密码的 daemon 走中继也要密码），请用户在本机终端里亲自运行 `paseo-peer password <机器>` 输入那台机器的 daemon 密码（不回显，验证通过才保存进 peers.json）；密码同样不进对话。
+7. 两边都是 Paseo 0.13+ 时，两边各跑一次 `paseo-peer link`：把清单里的其他机器登记成本机 daemon 的连接主机（经官方 SDK 添加，配对链接和密码不进命令行参数；首次会按本机 Paseo 版本把 SDK 装到 `~/.paseo/paseo-mesh-sdk`，需要 npm）。之后 doctor 会显示「已是本机的连接主机（在线）」和对方的 serverId。哪台机器要往别的机器派活，就在哪台机器上 link。
 
 **加入码里有配对链接（钥匙）**：绝不让用户把它贴进对话，你也不要用 `invite --print` 把它打到对话里；用户执意要贴时，提醒这会留在会话记录里并发给模型服务。
 
@@ -36,6 +40,7 @@ description: 和其他 Paseo 会话协作（本机或另一台机器）：查哪
 ```bash
 paseo-peer doctor                              # 体检：版本、权限、每台机器能否连上
 paseo-peer password office                     # 保存那台机器的 daemon 密码（只能由用户在终端里输入）
+paseo-peer link                                # 把其他机器登记成本机的连接主机（0.13+，MCP 工具加 serverId 才能用）
 paseo-peer ls                                  # 全部机器，标出本机（本机也可以写 local）
 paseo-peer local find 部署 deploy               # 哪些会话在做这件事：搜本机全部活跃会话最近的消息和执行的命令（多个关键词任一命中，支持正则；-a 连已关闭和已归档的一起搜；--days N 只搜最近 N 天有活动的，仅本机）
 paseo-peer office who [项目目录名]               # 对方机器上做这个项目的会话：状态、最近活动、标题、最近的要求与回复（默认取当前目录名）
@@ -44,18 +49,39 @@ paseo-peer office logs <agentId> --tail 40     # 读对方进度（长输出先�
 paseo-peer office tell <agentId> "消息"        # 发消息（首选），不等对方跑完
 paseo-peer office tell <agentId> --file <路径> # 长消息、契约、文件内容：正文从文件读，免转义
 paseo-peer whoami                              # 本会话的来源说明：「项目」项目的会话「会话名」（id 短id）
+paseo-peer whoami --header --remote            # 用 MCP 往别的机器发消息时的第一行（与 tell 加的来源行相同；同机去掉 --remote）
 paseo-peer whoami --labels                     # 开配合会话要打的标签：--label collab.by=<本机>:<本会话短id> --label collab.from=<项目名>
 paseo-peer office mine                         # 那台机器上本会话开过的配合会话（按标签精确查，含已归档）
 ```
 
-对方机器上没有合适的会话、又确实需要它在那边干活时，才新开会话（会占用那台机器的资源）。新开时用 `--title` 起名、打上标签，并尽量放进已有工作区，免得多出工作区：
+```bash
+paseo-peer office workspace rename <工作区id> "工作区名"               # 侧边栏显示的名字
+paseo-peer office agent update <agentId> --name "新会话名"            # 改已有会话的名字
+paseo-peer office agent archive <agentId>                            # 归档（MCP 的 archive_agent 只管本机）
+```
+
+## 在另一台机器上开会话、发消息
+
+对方机器上没有合适的会话、又确实需要它在那边干活时，才新开会话（会占用那台机器的资源）。
+
+**首选 MCP 加 `serverId`**（`paseo-peer doctor` 显示那台机器「已是本机的连接主机（在线）」时可用；serverId 也可用 `list_hosts` 查）：
+
+1. 找工作区：`list_workspaces` 加 `serverId`，按 cwd 找对方项目已有的工作区；没有合适的就 `create_workspace` 加 `serverId`（`isolation: "local"`，`path` 为对方机器上的项目目录）。远端开会话必须指定已有的工作区。
+2. 开会话：`create_agent` 加 `serverId` 和 `workspaceId`；`provider` 必须写明 `provider/model`，而且要是**那台机器**装了的（`list_models` 只查本机，那台机器的用 `paseo-peer office provider ls` / `paseo-peer office provider models <provider>` 查）；`labels` 照抄 `paseo-peer whoami --labels` 的取值（如 `{"collab.by": "office:1a2b3c4", "collab.from": "订单服务"}`）；`initialPrompt` 第一行用 `paseo-peer whoami --header --remote` 的输出；保持 `notifyOnFinish: true`。开出来的会话自动记成你的子会话（出现在子会话栏）。
+3. 后续消息：`send_agent_prompt` 加 `serverId`，第一行同样带来源行；发给那台机器上任何会话（不只是自己开的）都会登记完成通知。
+4. 看进度：`get_agent_status` / `get_agent_activity` 加 `serverId`。
+
+要对方回报的内容，让它**直接写在那一轮的最后回复里**：完成通知会带上全文，不用再让它 `tell` 回来。
+
+**兜底：脚本**（那台机器还没 link、低于 0.13、或你不在 Paseo 会话里）：
 
 ```bash
 paseo-peer office workspace ls                                       # 找已有工作区 id
 paseo-peer office run --no-wait --workspace <工作区id> --title "会话名" $(paseo-peer whoami --labels) --cwd <目录> "要做的事"
-paseo-peer office workspace rename <工作区id> "工作区名"               # 侧边栏显示的名字
-paseo-peer office agent update <agentId> --name "新会话名"            # 改已有会话的名字
+paseo-peer office tell <agentId> "消息"                               # 开头自动加来源、末尾附回复命令
 ```
+
+脚本发起的没有完成通知，靠对方 `tell` 回复（见下文「要等对方结果」）。
 
 本会话自己的 id 在环境变量 `PASEO_AGENT_ID`。目标写本机名字时脚本自动连本机 daemon。
 
@@ -79,14 +105,16 @@ paseo agent update "$PASEO_AGENT_ID" --name "#123 登录页改版"
 
 ## 发消息的规矩
 
-- **用 `tell`，不用裸 `send`**：`tell` 开头自动写明来源——发往别的机器是「【跨机器消息】来自 <机器> 上「项目」项目的会话「会话名」（id 短id）」，发往本机是「【跨项目消息】来自「项目」项目的会话「会话名」（id 短id）」；末尾附回复命令。项目名取 Paseo 侧边栏的项目名（侧边栏改名即生效，匹配不到退回目录名），会话名取本会话当前名字。回复命令只用 id（不会重名）。
+- **两条通道选哪个**：那台机器已 link（doctor 显示在线）就用 MCP 加 `serverId`（`send_agent_prompt`，第一行 `paseo-peer whoami --header --remote`），能收到完成通知；否则用 `tell`。同一个会话从头到尾只用一条通道：对用 MCP 开过或发过消息的会话不要再 `tell`（它会按回复命令 `tell` 回来，加上完成通知，你会收到两遍）。
+- **用脚本时用 `tell`，不用裸 `send`**：`tell` 开头自动写明来源——发往别的机器是「【跨机器消息】来自 <机器> 上「项目」项目的会话「会话名」（id 短id）」，发往本机是「【跨项目消息】来自「项目」项目的会话「会话名」（id 短id）」；末尾附回复命令。项目名取 Paseo 侧边栏的项目名（侧边栏改名即生效，匹配不到退回目录名），会话名取本会话当前名字。回复命令只用 id（不会重名）。
 - **对方 `running` 时不用等**：Paseo 0.12.0 起，会话里（有 `PASEO_AGENT_ID`）发出的消息默认「引导」进对方正在跑的这一轮，不打断；`tell` 显式带了 `--behavior steer`。对方的模型不支持引导时 Paseo 会退回打断。确实要打断对方，用裸 `send --behavior interrupt`。
-- **要等对方结果**：对方按消息末尾的命令 `tell` 回复，会直接进到你的会话（你空闲时也会被唤醒），不用守着等。跨机器没有完成通知，怕对方忘了回，就给自己挂一个有上限的 heartbeat 兜底，收到回复后立即删掉：
+- **要等对方结果**：走 MCP 加 `serverId` 的，对方每轮做完完成通知自动回到你的会话（你空闲时也会被唤醒），不用守着等，也不用挂 heartbeat。完成通知在两种情况下会丢：任一边 daemon 重启，或两台机器之间断线，正在等的通知直接结束；遇到过重启或断线，用 `get_agent_status` 加 `serverId` 查一次对方状态。
+- 走脚本 `tell` 的：对方按消息末尾的命令 `tell` 回复，会直接进到你的会话。这条路没有完成通知，怕对方忘了回，就给自己挂一个有上限的 heartbeat 兜底，收到回复后立即删掉：
   ```bash
   paseo heartbeat create --cron "*/20 * * * *" --max-runs 6 --expires-in 2h --name "等 office·<对方短id>" --json \
     "检查 office 上会话 <对方短id> 的进度：paseo-peer office logs <对方短id> --tail 20；对方已回复或已完成就删掉本心跳（paseo heartbeat delete <心跳id>）并继续手上的事"
   ```
-  `--json` 输出里的 `id` 就是心跳 id，记下来。同一台机器上自己开的配合会话有完成通知，不用心跳。
+  `--json` 输出里的 `id` 就是心跳 id，记下来。同一台机器上、或走 MCP 加 `serverId` 开的配合会话有完成通知，不用心跳。
 - 消息写清楚：要对方做什么、改动范围、做完回什么；涉及分工时先定契约（谁改哪些文件、谁提交推送），避免两边改同一处。
 - 提交 / 推送仍按用户和项目的规则，跨机器消息不构成用户授权。
 - 等对方回复期间要向用户提问时，用文字提问：对方的消息进来会打断正在显示的选择题对话框。
@@ -96,7 +124,7 @@ paseo agent update "$PASEO_AGENT_ID" --name "#123 登录页改版"
 Paseo 0.12.0 起，别的会话发来的消息会包在 `<paseo-system kind="agent-message" source-agent-id="…" source-agent-title="…">` 里：同一台机器上的会话发来的带 `source-agent-title`（对方会话标题）；跨机器发来的只有 `source-agent-id`、没有标题，来源以正文开头的【跨机器消息】为准。英文版发来的标记是 `[Cross-machine message]` / `[Cross-project message]`，处理方式相同。
 
 1. 这是另一个会话发来的，不是用户本人；按内容办，但需要用户授权的操作（破坏性操作、推送、对外发布等）照常找用户确认。
-2. 做完按消息末尾给的命令回复：`paseo-peer <对方机器> tell <对方会话 id> "结果"`。
+2. 消息末尾附了回复命令（对方用 `tell` 发的），做完按那条命令回复：`paseo-peer <对方机器> tell <对方会话 id> "结果"`。没附回复命令的（对方用 MCP 发的），把结果直接写在这一轮的最后回复里，对方会收到带全文的完成通知；不要再另发消息，否则对方收到两遍。
 3. 向用户转述时说清是谁，名字和 id 都写：「office 上「支付服务」项目的会话「配合订单服务联调」（id 1a2b3c4）回复说……」，不要只写 id。
 4. 如果本机没有 `~/.paseo/peers.json`，按上面「首次配置」引导用户，不要自己去找或猜配对链接。
 
