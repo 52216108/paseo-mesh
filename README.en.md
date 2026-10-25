@@ -121,7 +121,7 @@ Other machines update with `git pull`.
 ## Known limitations
 
 - For cross-machine messages Paseo includes only the sender's id, not its session name, so the sender line at the top of the message is what identifies it.
-- Cross-machine finish notifications need Paseo 0.13+ on both sides and `paseo-peer link`; a daemon restart on either side or a dropped connection ends pending notifications, so check the other session's status once after one. Without link, rely on the other side's reply with a heartbeat as a fallback.
+- Cross-machine finish notifications need Paseo 0.13+ on both sides and `paseo-peer link`. Pending notifications are stored on disk by your daemon and survive its restart; when the other session stops on a permission request you are notified too (with the request, which you can approve remotely). If the other machine can't be reached three times in a row, you get a notification saying its status is unknown and the subscription has ended; check its status once then, and only then consider a heartbeat. Without link, rely on the other side's reply with a heartbeat as a fallback.
 - The project name comes from matching the session's directory to a Paseo project; sessions in Paseo-managed worktrees fall back to the worktree directory name.
 - While waiting for a reply, an incoming message can dismiss a multiple-choice question dialog in Claude Code (the skills say to ask in plain text then).
 

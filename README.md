@@ -121,7 +121,7 @@ ln -s ~/projects/paseo-mesh/skills/paseo-cross-project-zh ~/.claude/skills/paseo
 ## 已知限制
 
 - 跨机器发来的消息，Paseo 只带发送方 id、不带会话名，所以来源靠消息开头那一行辨认。
-- 跨机器完成通知需要两边都是 Paseo 0.13+ 且已 `paseo-peer link`；任一边 daemon 重启或两台机器断线时，正在等的通知会丢，需要查一次对方状态。没 link 时靠对方回复或 heartbeat 兜底。
+- 跨机器完成通知需要两边都是 Paseo 0.13+ 且已 `paseo-peer link`。等待中的通知存在本机 daemon 的磁盘上，本机 daemon 重启后会恢复；对方会话停在权限请求时也会通知你（带请求内容，可以远程批准）。对方连续三次连不上时，你会收到一条「状态未知、订阅已结束」的通知，这时查一次对方状态，必要时再挂 heartbeat。没 link 时靠对方回复或 heartbeat 兜底。
 - 项目名按会话所在目录匹配 Paseo 项目；开在 Paseo 管理的 worktree 里的会话，项目名会退回 worktree 目录名。
 - 等对方回复期间，对方消息进来可能打断 Claude Code 的选择题对话框（skill 里已要求此时用文字提问）。
 

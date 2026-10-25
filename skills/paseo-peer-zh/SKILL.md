@@ -108,7 +108,7 @@ paseo agent update "$PASEO_AGENT_ID" --name "#123 登录页改版"
 - **两条通道选哪个**：那台机器已 link（doctor 显示在线）就用 MCP 加 `serverId`（`send_agent_prompt`，第一行 `paseo-peer whoami --header --remote`），能收到完成通知；否则用 `tell`。同一个会话从头到尾只用一条通道：对用 MCP 开过或发过消息的会话不要再 `tell`（它会按回复命令 `tell` 回来，加上完成通知，你会收到两遍）。
 - **用脚本时用 `tell`，不用裸 `send`**：`tell` 开头自动写明来源——发往别的机器是「【跨机器消息】来自 <机器> 上「项目」项目的会话「会话名」（id 短id）」，发往本机是「【跨项目消息】来自「项目」项目的会话「会话名」（id 短id）」；末尾附回复命令。项目名取 Paseo 侧边栏的项目名（侧边栏改名即生效，匹配不到退回目录名），会话名取本会话当前名字。回复命令只用 id（不会重名）。
 - **对方 `running` 时不用等**：Paseo 0.12.0 起，会话里（有 `PASEO_AGENT_ID`）发出的消息默认「引导」进对方正在跑的这一轮，不打断；`tell` 显式带了 `--behavior steer`。对方的模型不支持引导时 Paseo 会退回打断。确实要打断对方，用裸 `send --behavior interrupt`。
-- **要等对方结果**：走 MCP 加 `serverId` 的，对方每轮做完完成通知自动回到你的会话（你空闲时也会被唤醒），不用守着等，也不用挂 heartbeat。完成通知在两种情况下会丢：任一边 daemon 重启，或两台机器之间断线，正在等的通知直接结束；遇到过重启或断线，用 `get_agent_status` 加 `serverId` 查一次对方状态。
+- **要等对方结果**：走 MCP 加 `serverId` 的，对方每轮做完完成通知自动回到你的会话（你空闲时也会被唤醒），不用守着等，也不用挂 heartbeat。本机 daemon 重启不影响：等待中的通知存在磁盘上，重启后自动恢复。对方停在权限请求时也会通知你，正文带 `<permission-request>`（含 `agentId`、`serverId`、`requestId`），默认把请求内容转述给用户、由用户决定；只有用户事先明确授权过这类操作时，才自己用 `respond_to_permission` 加这几个参数远程批准或拒绝。处理完后通知会继续等这一轮做完。唯一会结束的情况：对方机器连续三次连不上，你会收到「Could not observe child agent … after three failed attempts … This finish subscription has ended」，这时用 `get_agent_status` 加 `serverId` 查一次对方状态（连不上就等网络恢复后再查），对方还在跑而你又必须等结果时，才按下一条挂有上限的 heartbeat。通知正文只带对方最后回复的前 4000 字，看全文用 `get_agent_activity` 加 `serverId`。
 - 走脚本 `tell` 的：对方按消息末尾的命令 `tell` 回复，会直接进到你的会话。这条路没有完成通知，怕对方忘了回，就给自己挂一个有上限的 heartbeat 兜底，收到回复后立即删掉：
   ```bash
   paseo heartbeat create --cron "*/20 * * * *" --max-runs 6 --expires-in 2h --name "等 office·<对方短id>" --json \
