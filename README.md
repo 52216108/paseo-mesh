@@ -112,6 +112,8 @@ ln -s ~/projects/paseo-mesh/skills/paseo-cross-project-zh ~/.claude/skills/paseo
 
 其他机器 `git pull` 即更新。
 
+运行测试：`npm test`（即 `node --test 'test/*.test.mjs'`，Node 22+，零依赖）。端到端测试会在临时目录起两个真实 Paseo daemon（不连中继、不碰 `~/.paseo` 里的 daemon），用不调模型的回声 provider 覆盖 `find` / `tell` / `link`；需要装好 Paseo（CLI 路径可用 `PASEO_BIN` 覆盖），`link` 测试还需要已装好的同版本 SDK（`~/.paseo/paseo-mesh-sdk`，或用 `PASEO_PEER_SDK` 指定），缺了就跳过。
+
 ## 安全
 
 - **配对链接 = 钥匙**。拿到它的人可以操控那台机器上的 agent。`peers.json` 只放本机、`chmod 600`、不进任何仓库；skill 也要求会话不在对话、消息、记忆里回显它。脚本把链接经环境变量（`PASEO_HOST`）交给 Paseo CLI，不出现在命令行参数里（其他系统用户用 `ps` 看不到）；`peers.json` 权限不是 600 时脚本拒绝运行。

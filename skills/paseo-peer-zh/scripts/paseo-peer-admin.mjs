@@ -224,6 +224,9 @@ function buildRelayConnection(m) {
     url.searchParams.set("key", offer.daemonPublicKeyB64)
     if (offer.relay.useTls) url.searchParams.set("ssl", "true")
     if (offer.minimumSecurityMode) url.searchParams.set("security", offer.minimumSecurityMode)
+  } else if (process.env.PASEO_PEER_ALLOW_DIRECT === "1" && /^(tcp|wss?):$/.test(new URL(m.pairing).protocol)) {
+    // Opt-in only (used by the end-to-end tests): a direct daemon address instead of a relay pairing link
+    url = new URL(m.pairing)
   } else {
     throw new Error("unrecognized pairing link")
   }

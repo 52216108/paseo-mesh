@@ -1,0 +1,7 @@
+{
+  "name": "paseo-mesh",
+  "private": true,
+  "scripts": {
+    "test": "node --test 'test/*.test.mjs'"
+  }
+}

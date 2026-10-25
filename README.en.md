@@ -112,6 +112,8 @@ ln -s ~/projects/paseo-mesh/skills/paseo-cross-project ~/.claude/skills/paseo-cr
 
 Other machines update with `git pull`.
 
+Run the tests with `npm test` (that is `node --test 'test/*.test.mjs'`; Node 22+, no dependencies). The end-to-end tests start two real Paseo daemons in temp dirs (relay off, the daemon in `~/.paseo` is never touched) and cover `find` / `tell` / `link` with a model-free echo provider. They need Paseo installed (override the CLI path with `PASEO_BIN`); the `link` test also needs an installed SDK of the same version (`~/.paseo/paseo-mesh-sdk`, or point `PASEO_PEER_SDK` at one) and is skipped without it.
+
 ## Security
 
 - **A pairing link is a key.** Whoever has it can drive the agents on that machine. Keep `peers.json` on the machine only, `chmod 600`, out of every repository; the skills also tell sessions never to echo it in chat, messages, or memory. The script hands the link to the Paseo CLI through the environment (`PASEO_HOST`), never in argv (so other users can't see it with `ps`), and refuses to run if `peers.json` isn't mode 600.

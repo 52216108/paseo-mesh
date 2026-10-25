@@ -1,0 +1,6 @@
+{
+  "id": "peer-echo-provider",
+  "name": "paseo-peer echo provider (test)",
+  "description": "Test-only agent provider for the paseo-peer end-to-end tests; echoes every prompt, calls no model",
+  "requirements": { "paseo": ">=0.13.0" }
+}
