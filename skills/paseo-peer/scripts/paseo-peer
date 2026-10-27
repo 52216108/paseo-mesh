@@ -180,6 +180,8 @@ if [ "$1" = ls ]; then
 fi
 
 target="$1"; shift
+# A bare `paseo` (no subcommand) is not help: it can print this machine's pairing link. Show our usage instead.
+[ $# -ge 1 ] || { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 if [ "$target" = local ] || { [ "$HAVE_PEERS" = 0 ] && [ "$target" = "$(self_machine name)" ]; }; then
   info="$SELF_ID
 "
