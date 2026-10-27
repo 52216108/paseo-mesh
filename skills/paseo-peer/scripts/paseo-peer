@@ -51,6 +51,8 @@ case "${PASEO_PEER_LANG:-}" in
 esac
 # t "<中文>" "<English>"
 t() { if [ "$LANG_UI" = zh ]; then printf '%s' "$1"; else printf '%s' "$2"; fi; }
+# Usage = the comment block at the top: from line 2 up to the first line that isn't a comment
+usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; }
 
 PEERS="${PASEO_PEERS:-$HOME/.paseo/peers.json}"
 # Paseo CLI: `paseo` on PATH first, then the CLI bundled with the macOS desktop app
@@ -84,7 +86,7 @@ if [ -f "$PEERS" ]; then
      echo >&2; exit 1 ;;
   esac
 fi
-[ $# -ge 1 ] || { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+[ $# -ge 1 ] || { usage; exit 1; }
 
 # Codex shells may omit PASEO_AGENT_ID. Match the native thread against the local
 # daemon's persisted agents, never cwd/title/activity. Ambiguous or unreadable
@@ -181,7 +183,7 @@ fi
 
 target="$1"; shift
 # A bare `paseo` (no subcommand) is not help: it can print this machine's pairing link. Show our usage instead.
-[ $# -ge 1 ] || { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+[ $# -ge 1 ] || { usage; exit 1; }
 if [ "$target" = local ] || { [ "$HAVE_PEERS" = 0 ] && [ "$target" = "$(self_machine name)" ]; }; then
   info="$SELF_ID
 "
