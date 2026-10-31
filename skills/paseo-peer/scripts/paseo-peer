@@ -318,7 +318,9 @@ if [ "${1:-}" = find ]; then
         console.error(zh ? "（--days 只对本机生效，这次搜全部）" : "(--days only works on this machine; searching all)")
       }
       const cutoff = days && !remote ? Date.now() - Number(days) * 86400000 : 0
-      const agents = JSON.parse(await run(["ls", "-g", "-a", "--json"]))
+      // -a only when asked: on another machine archived sessions come back as "idle" with no archive time, so
+      // without this every archived session would be scanned (hundreds of extra paseo logs calls over the relay)
+      const agents = JSON.parse(await run(["ls", "-g", ...(all === "1" ? ["-a"] : []), "--json"]))
         .map((a) => ({ ...a, updated: rec.get(a.id)?.updated ?? "", status: rec.get(a.id)?.archived ? "archived" : a.status }))
         .filter((a) => a.id !== self && (all === "1" || !["closed", "archived"].includes(a.status)))
         .filter((a) => !cutoff || !a.updated || Date.parse(a.updated) >= cutoff)
