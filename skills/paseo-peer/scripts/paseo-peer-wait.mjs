@@ -57,7 +57,7 @@ export function initialState(startMs) {
  * - running at any poll = the turn has started (already running on the first poll counts);
  * - after that, leaving running (to anything but initializing) = the turn is over;
  * - never seen running, but UpdatedAt moved and the session is idle/error again = a turn shorter than one interval;
- * - a pending permission request ends the wait at once (we only report it, never answer it);
+ * - a pending permission request ends the wait at once (we only report it, never answer it: the caller decides);
  * - no running within the start grace = not started; still running at the timeout = timeout.
  */
 export function step(state, sample, nowMs, opts) {
@@ -161,8 +161,8 @@ async function main() {
     console.log(L(`等了 ${span}，${target} 上的会话 ${short} 还在跑（${now}，状态 ${done.status ?? last?.status}）。要继续等就再运行一次 wait`,
                   `Waited ${span}; session ${short} on ${target} is still running (${now}; status ${done.status ?? last?.status}). Run wait again to keep waiting`))
   } else if (done.code === EXIT.permission) {
-    console.log(L(`${target} 上的会话 ${short} 停在权限请求（${now}），未代为批准，请转给用户决定：`,
-                  `Session ${short} on ${target} is waiting on a permission request (${now}); not answered — ask the user:`))
+    console.log(L(`${target} 上的会话 ${short} 停在权限请求（${now}），wait 没有代批：`,
+                  `Session ${short} on ${target} is waiting on a permission request (${now}); wait did not answer it:`))
     const r = await run(["permit", "ls", "--json"])
     let detail = null
     try {
@@ -171,8 +171,8 @@ async function main() {
       if (mine.length) detail = mine
     } catch {}
     console.log(JSON.stringify(detail ?? last.pending, null, 2))
-    console.log(L(`用户同意后：${self} ${target} permit allow ${short} <请求id>；拒绝：${self} ${target} permit deny ${short} <请求id>`,
-                  `If the user agrees: ${self} ${target} permit allow ${short} <request id>; to refuse: ${self} ${target} permit deny ${short} <request id>`))
+    console.log(L(`属于交代的任务就直接批：${self} ${target} permit allow ${short} <请求id>（都在范围内可用 --all），再 ${self} ${target} agent mode ${short} bypassPermissions（Codex 用 full-access）免得又停住，然后重新运行 wait；超出任务范围（删数据、推到不相干的地方、对外发布等）就拒绝并问用户：${self} ${target} permit deny ${short} <请求id>`,
+                  `If it is part of the task you delegated, approve it: ${self} ${target} permit allow ${short} <request id> (--all if every pending one is), then ${self} ${target} agent mode ${short} bypassPermissions (full-access for Codex) so it doesn't stop again, and run wait again. If it is outside the task (deleting data, pushing somewhere unrelated, publishing…), deny it and ask the user: ${self} ${target} permit deny ${short} <request id>`))
   } else {
     console.log(L(`一直查不到 ${target} 上会话 ${args.id} 的状态（${now}）：${state.lastError}`,
                   `Could not read the status of session ${args.id} on ${target} (${now}): ${state.lastError}`))

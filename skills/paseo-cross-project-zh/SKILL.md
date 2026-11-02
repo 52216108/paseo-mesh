@@ -22,7 +22,7 @@ description: 一个项目的工作需要另一个项目配合时（如订单服�
 
 1. `list_workspaces` 看对方项目（按 `cwd`）已有的工作区。工作区按任务分，**不要把配合会话塞进别人正在用的工作区**；有用户点名的就用那个，否则新建：
    - `create_workspace`：`isolation: "local"`，`path` 为对方项目目录（如 `~/projects/payment-service`），`title` 写任务，如「配合订单服务：退款接口」。
-2. `create_agent`：`workspaceId` 填上一步的工作区，`title` 说明任务（如「配合订单服务联调」）；`provider`、`settings` 有合适的 agent profile 就按 profile 填（先 `list_profiles` 看 notes），没有就按任务难度选（跨机器时必须写明 `provider/model`，且是那台机器装了的：`paseo-peer <机器> provider ls`、`paseo-peer <机器> provider models <provider>`）；`labels` 打上 `collab.by` 与 `collab.from`（取值照抄 `paseo-peer whoami --labels` 的输出，如 `{"collab.by": "office:1a2b3c4", "collab.from": "订单服务"}`），之后用 `paseo-peer <机器> mine` 一次找回自己开过的配合会话；`initialPrompt` 按下面第 2 节写。保持 `notifyOnFinish: true`。跨机器且还没 link 时用 `paseo-peer <机器> run … $(paseo-peer whoami --labels)`。
+2. `create_agent`：`workspaceId` 填上一步的工作区，`title` 说明任务（如「配合订单服务联调」）；`provider`、`settings` 有合适的 agent profile 就按 profile 填（先 `list_profiles` 看 notes），没有就按任务难度选（跨机器时必须写明 `provider/model`，且是那台机器装了的：`paseo-peer <机器> provider ls`、`paseo-peer <机器> provider models <provider>`）；`labels` 打上 `collab.by` 与 `collab.from`（取值照抄 `paseo-peer whoami --labels` 的输出，如 `{"collab.by": "office:1a2b3c4", "collab.from": "订单服务"}`），之后用 `paseo-peer <机器> mine` 一次找回自己开过的配合会话；`initialPrompt` 按下面第 2 节写。`settings.modeId` 填全部放行模式（Claude `bypassPermissions`、Codex `full-access`），免得对方卡在权限请求上。保持 `notifyOnFinish: true`。跨机器且还没 link 时用 `paseo-peer <机器> run --mode bypassPermissions … $(paseo-peer whoami --labels)`。
 3. 开前先看对方项目目录里有没有正在 `running` 的会话：`local` 工作区共用同一个工作树，两边会话同时改同一仓库时，各自只 `git add` 自己改的文件、不要 `git add -A`、不要切分支；改动面重叠时两个会话直接互发消息协调（谁先提交、另一方再合并），协调不了再找用户。
 
 ## 2. 第一条消息（契约先行）
@@ -42,7 +42,7 @@ description: 一个项目的工作需要另一个项目配合时（如订单服�
 
 ## 3. 协作过程
 
-- 后续消息：用 `send_agent_prompt`（第一行带来源，跨机器加 `serverId`）；那台机器还没 link 时用 `paseo-peer <机器> tell`。都不用等对方空闲（默认引导进对方当前轮）。不要轮询：走 MCP 的配合会话每轮做完都有完成通知；本机 daemon 重启不丢通知，对方停在权限请求时也会通知；只有收到「对方连续三次连不上、订阅已结束」的通知时，才用 `get_agent_status`（跨机器加 `serverId`）查一次。走 `tell` 的靠对方回复，怕对方忘了回就按 skill `paseo-peer-zh`「要等对方结果」挂一个有上限的 heartbeat 兜底，收到回复即删。
+- 后续消息：用 `send_agent_prompt`（第一行带来源，跨机器加 `serverId`）；那台机器还没 link 时用 `paseo-peer <机器> tell`。都不用等对方空闲（默认引导进对方当前轮）。不要轮询：走 MCP 的配合会话每轮做完都有完成通知；本机 daemon 重启不丢通知，对方停在权限请求时也会通知（任务范围内的直接批，见 skill `paseo-peer-zh`「权限请求」）。发送时对方是 `closed`、或收到「对方连续三次连不上、订阅已结束」的通知时，等不到完成通知，改在后台跑 `paseo-peer <机器> wait <agentId>`（同机用 `local`）。走 `tell` 的靠对方回复，怕对方忘了回就按 skill `paseo-peer-zh`「要等对方结果」挂一个有上限的 heartbeat 兜底，收到回复即删。
 - 契约要改：由发起方改定后整段重发给对方，不在来回消息里零碎修补。
 - 联调顺序：先部署被调用的服务提供方，确认接口在目标环境可用（实际请求一次），再部署调用方；只测试环境联调时同理。
 - 两边都完成后，发起方实际跑一次端到端请求，核对字段与契约一致，再向用户汇报。

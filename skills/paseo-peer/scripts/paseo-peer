@@ -37,7 +37,7 @@
 #                                                    final status and its last reply in full (run it in the background
 #                                                    after sending; defaults 60 min / 30 s / 300 s, timeout max 120 min).
 #                                                    Exit 0 finished, 2 never started, 3 still running at the timeout,
-#                                                    4 stopped at a permission request (not answered), 5 status unreadable
+#                                                    4 stopped at a permission request (printed, not answered), 5 status unreadable
 #   paseo-peer <machine> send --no-wait <agentId> "message"   Raw send, no sender line
 #
 # Language of the sender/reply lines: PASEO_PEER_LANG=zh|en; by default zh when installed as a "-zh" skill, else en.
