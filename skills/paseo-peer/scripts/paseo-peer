@@ -32,6 +32,12 @@
 #   paseo-peer <machine> tell <agentId> "message"  Message a session there (preferred). Adds a sender line on top and a reply
 #   paseo-peer <machine> tell <agentId> --file <p>   command at the bottom; steers into a running turn instead of interrupting.
 #                                                    Marked "cross-project" when the target is this machine, else "cross-machine".
+#   paseo-peer <machine> wait <agentId> [--timeout M] [--interval S] [--start-grace S]
+#                                                    Wait for that session's current/next turn to finish, then print the
+#                                                    final status and its last reply in full (run it in the background
+#                                                    after sending; defaults 60 min / 30 s / 300 s, timeout max 120 min).
+#                                                    Exit 0 finished, 2 never started, 3 still running at the timeout,
+#                                                    4 stopped at a permission request (not answered), 5 status unreadable
 #   paseo-peer <machine> send --no-wait <agentId> "message"   Raw send, no sender line
 #
 # Language of the sender/reply lines: PASEO_PEER_LANG=zh|en; by default zh when installed as a "-zh" skill, else en.
@@ -364,6 +370,14 @@ if [ "${1:-}" = find ]; then
       }
     })()
   ' "$PASEO" "$pattern" "$all" "${PASEO_AGENT_ID:-}" "$LANG_UI" "$days"
+fi
+
+if [ "${1:-}" = wait ]; then
+  shift
+  host=""
+  [ "$server_id" = "$SELF_ID" ] || host="$pairing"
+  PEER_HOST="$host" PEER_PASSWORD="${host:+$peer_password}" PASEO="$PASEO" LANG_UI="$LANG_UI" PEER_TARGET="$target" \
+    SELF_CMD="$SELF_CMD" exec node "$SCRIPT_DIR/paseo-peer-wait.mjs" "$@"
 fi
 
 if [ "${1:-}" = tell ]; then

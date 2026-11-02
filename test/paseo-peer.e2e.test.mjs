@@ -154,4 +154,60 @@ describe("paseo-peer end-to-end", { skip: haveDaemon() ? false : `Paseo CLI not 
       assert.match(r.stderr, /Can't parse the pairing link for b/)
     })
   })
+
+  // Last: the closed case restarts b's daemon, which closes every session there
+  describe("wait", () => {
+    const status = async (m, agent) => (await m.cliJson(["inspect", agent.id])).Status
+    const fast = ["--interval", "1"]
+
+    test("target was closed: sending wakes it, wait sees the whole turn and prints the full reply", async () => {
+      const r0 = await b.cli(["daemon", "restart", "--timeout", "60"])
+      assert.equal(r0.code, 0, r0.stderr)
+      await waitFor(async () => (await status(b, bravo)) === "closed", { message: "bravo never became closed" })
+      // Longer than the 4000 characters a finish notification carries
+      const body = `closed-case ${tag} sleep:3 ${"long-".repeat(1000)}end-${tag}`
+      const sent = await a.peer(["b", "send", "--no-wait", bravo.id, body])
+      assert.equal(sent.code, 0, sent.stderr)
+      const r = await a.peer(["b", "wait", bravo.shortId, ...fast], { PASEO_PEER_LANG: "en" })
+      console.log(r.stdout.slice(0, 300) + " … " + r.stdout.slice(-80))
+      assert.equal(r.code, 0, r.stdout + r.stderr)
+      assert.match(r.stdout, new RegExp(`^Session ${bravo.shortId} on b finished its turn \\(.+\\); final status idle$`, "m"))
+      assert.ok(r.stdout.includes(`Echo: ${body}`), "full reply missing")
+      assert.ok(r.stdout.length > 5000)
+    })
+
+    test("target was idle: wait (zh) follows the turn to the end", async () => {
+      assert.equal(await status(a, beta), "idle")
+      const body = `idle-case ${tag} sleep:3`
+      const sent = await a.peer(["local", "send", "--no-wait", beta.id, body])
+      assert.equal(sent.code, 0, sent.stderr)
+      const r = await a.peer(["local", "wait", beta.shortId, ...fast], { PASEO_PEER_LANG: "zh" })
+      console.log(r.stdout)
+      assert.equal(r.code, 0, r.stdout + r.stderr)
+      assert.match(r.stdout, new RegExp(`local 上的会话 ${beta.shortId} 这一轮已跑完（.+），最终状态 idle`))
+      assert.match(r.stdout, new RegExp(`--- 最后一条回复（全文）---\\nEcho: ${body}$`, "m"))
+    })
+
+    test("nothing sent: exits 2 (not started) after the start grace", async () => {
+      const r = await a.peer(["local", "wait", alpha.shortId, ...fast, "--start-grace", "3"], { PASEO_PEER_LANG: "en" })
+      console.log(r.stdout)
+      assert.equal(r.code, 2, r.stdout + r.stderr)
+      assert.match(r.stdout, new RegExp(`Session ${alpha.shortId} on local did not start within 3 s`))
+    })
+
+    test("still running at the timeout: exits 3", async () => {
+      const sent = await a.peer(["local", "send", "--no-wait", alpha.id, `slow ${tag} sleep:20`])
+      assert.equal(sent.code, 0, sent.stderr)
+      const r = await a.peer(["local", "wait", alpha.shortId, ...fast, "--timeout", "0.05"], { PASEO_PEER_LANG: "en" })
+      console.log(r.stdout)
+      assert.equal(r.code, 3, r.stdout + r.stderr)
+      assert.match(r.stdout, /is still running/)
+    })
+
+    test("unknown session: exits 5 after the start grace", async () => {
+      const r = await a.peer(["local", "wait", "fffffff", ...fast, "--start-grace", "2"], { PASEO_PEER_LANG: "en" })
+      assert.equal(r.code, 5, r.stdout + r.stderr)
+      assert.match(r.stdout, /Could not read the status of session fffffff on local/)
+    })
+  })
 })

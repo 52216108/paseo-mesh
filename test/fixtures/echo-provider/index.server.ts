@@ -10,8 +10,8 @@ type Emit = (event: Json) => void
 
 const MODEL = { id: "echo-1", label: "Echo 1" }
 const MODE = { id: "default", label: "Default" }
-// Steer is declared because paseo-peer tell sends with --behavior steer; an echo turn finishes at once,
-// so a steered prompt is simply answered as a new turn.
+// Steer is declared because paseo-peer tell sends with --behavior steer; an echo turn finishes at once
+// (unless it was asked to sleep), so a steered prompt is simply answered as a new turn.
 const SUPPORTED = ["prompt.message", "prompt.steer", "session.archive", "session.unarchive", "session.list", "session.persistence"]
 
 interface Session {
@@ -128,8 +128,14 @@ function prompt(input: Json, session: Session, emit: Emit) {
   emit({ type: "timeline.item", sessionId, item: { type: "user_message", id: `user-${session.turn}`, text, clientMessageId } })
   emit({ type: "session.prompt_result", sessionId, clientMessageId, result: { type: "turn", turnId } })
   emit({ type: "session.turn", sessionId, turnId, state: "started" })
-  emit({ type: "timeline.item", sessionId, item: { type: "assistant_message", id: `assistant-${session.turn}`, text: `Echo: ${text}` } })
-  session.persistence = { version: 1, data: { nativeSessionId: `echo:${sessionId}`, turns: session.turn } }
-  emit({ type: "session.persistence", sessionId, persistence: session.persistence })
-  emit({ type: "session.turn", sessionId, turnId, state: "completed" })
+  // "sleep:N" anywhere in the prompt keeps the turn running for N seconds (for the wait tests)
+  const delay = Number(/sleep:(\d+)/.exec(text)?.[1] ?? 0) * 1000
+  const finish = () => {
+    emit({ type: "timeline.item", sessionId, item: { type: "assistant_message", id: `assistant-${session.turn}`, text: `Echo: ${text}` } })
+    session.persistence = { version: 1, data: { nativeSessionId: `echo:${sessionId}`, turns: session.turn } }
+    emit({ type: "session.persistence", sessionId, persistence: session.persistence })
+    emit({ type: "session.turn", sessionId, turnId, state: "completed" })
+  }
+  if (delay) setTimeout(finish, delay)
+  else finish()
 }

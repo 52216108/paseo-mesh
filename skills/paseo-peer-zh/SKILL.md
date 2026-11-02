@@ -47,6 +47,7 @@ paseo-peer office who [项目目录名]               # 对方机器上做这个
 paseo-peer office ls -g                        # 对方全部会话（只有标题、cwd、状态）
 paseo-peer office logs <agentId> --tail 40     # 读对方进度（长输出先存文件再看）
 paseo-peer office tell <agentId> "消息"        # 发消息（首选），不等对方跑完
+paseo-peer office wait <agentId>               # 等对方跑完这一轮，打印最终状态和最后回复全文（放后台跑，见「要等对方结果」）
 paseo-peer office tell <agentId> --file <路径> # 长消息、契约、文件内容：正文从文件读，免转义
 paseo-peer whoami                              # 本会话的来源说明：「项目」项目的会话「会话名」（id 短id）
 paseo-peer whoami --header --remote            # 用 MCP 往别的机器发消息时的第一行（与 tell 加的来源行相同；同机去掉 --remote）
@@ -108,8 +109,13 @@ paseo agent update "$PASEO_AGENT_ID" --name "#123 登录页改版"
 - **两条通道选哪个**：那台机器已 link（doctor 显示在线）就用 MCP 加 `serverId`（`send_agent_prompt`，第一行 `paseo-peer whoami --header --remote`），能收到完成通知；否则用 `tell`。同一个会话从头到尾只用一条通道：对用 MCP 开过或发过消息的会话不要再 `tell`（它会按回复命令 `tell` 回来，加上完成通知，你会收到两遍）。
 - **用脚本时用 `tell`，不用裸 `send`**：`tell` 开头自动写明来源——发往别的机器是「【跨机器消息】来自 <机器> 上「项目」项目的会话「会话名」（id 短id）」，发往本机是「【跨项目消息】来自「项目」项目的会话「会话名」（id 短id）」；末尾附回复命令。项目名取 Paseo 侧边栏的项目名（侧边栏改名即生效，匹配不到退回目录名），会话名取本会话当前名字。回复命令只用 id（不会重名）。
 - **对方 `running` 时不用等**：Paseo 0.12.0 起，会话里（有 `PASEO_AGENT_ID`）发出的消息默认「引导」进对方正在跑的这一轮，不打断；`tell` 显式带了 `--behavior steer`。对方的模型不支持引导时 Paseo 会退回打断。确实要打断对方，用裸 `send --behavior interrupt`。
-- **要等对方结果**：走 MCP 加 `serverId` 的，对方每轮做完完成通知自动回到你的会话（你空闲时也会被唤醒），不用守着等，也不用挂 heartbeat。本机 daemon 重启不影响：等待中的通知存在磁盘上，重启后自动恢复。对方停在权限请求时也会通知你，正文带 `<permission-request>`（含 `agentId`、`serverId`、`requestId`），默认把请求内容转述给用户、由用户决定；只有用户事先明确授权过这类操作时，才自己用 `respond_to_permission` 加这几个参数远程批准或拒绝。处理完后通知会继续等这一轮做完。唯一会结束的情况：对方机器连续三次连不上，你会收到「Could not observe child agent … after three failed attempts … This finish subscription has ended」，这时用 `get_agent_status` 加 `serverId` 查一次对方状态（连不上就等网络恢复后再查），对方还在跑而你又必须等结果时，才按下一条挂有上限的 heartbeat。通知正文只带对方最后回复的前 4000 字，看全文用 `get_agent_activity` 加 `serverId`。
-- 走脚本 `tell` 的：对方按消息末尾的命令 `tell` 回复，会直接进到你的会话。回复要等你当前这条命令结束才会显示：发完消息就结束这一轮，或把别的活放到后台去跑；**不要用前台长时间阻塞的命令去等**（比如循环翻对方日志、按措辞猜回复内容），否则回复已经到了你也看不到。这条路没有完成通知，怕对方忘了回，就给自己挂一个有上限的 heartbeat 兜底，收到回复后立即删掉：
+- **要等对方结果**：走 MCP 加 `serverId` 的，对方每轮做完完成通知自动回到你的会话（你空闲时也会被唤醒），不用守着等，也不用挂 heartbeat。本机 daemon 重启不影响：等待中的通知存在磁盘上，重启后自动恢复。对方停在权限请求时也会通知你，正文带 `<permission-request>`（含 `agentId`、`serverId`、`requestId`），默认把请求内容转述给用户、由用户决定；只有用户事先明确授权过这类操作时，才自己用 `respond_to_permission` 加这几个参数远程批准或拒绝。处理完后通知会继续等这一轮做完。通知通常很可靠，但**已知有两种情况等不到 `finished` 通知**：
+  1. **发送时对方是 `closed`**（Paseo 0.14.0 实测，跨机器加 `serverId`；同机未验证）：看 `send_agent_prompt` 返回值里的 `status`，是 `closed`（`deliveryStatus` 为 `queued`）就按「不会有完成通知」处理。几秒内你会收到一条 `event="closed"`、内容为「Agent xxx was closed」的通知，那是唤起对方时补发的过时事件，**不代表对方结束了**，而且它会把这次的完成订阅消耗掉，这一轮真做完时不会再通知。这时派完活在后台运行 `paseo-peer <机器> wait <agentId>`（见下一条），或之后用 `get_agent_status` 加 `serverId` 查状态。
+  2. **对方机器连续三次连不上**：你会收到「Could not observe child agent … after three failed attempts … This finish subscription has ended」。网络恢复后用 `get_agent_status` 加 `serverId` 查一次，对方还在跑而你又必须等结果，就在后台跑 `wait`（或按下文挂有上限的 heartbeat）。
+
+  通知正文只带对方最后回复的前 4000 字，看全文用 `get_agent_activity` 加 `serverId`，或用 `wait`（打印全文）。
+- **`wait`：可靠地等对方跑完一轮**（任何通道都能用，包括脚本 `tell` 和上面等不到通知的情况）：`paseo-peer office wait <agentId>` 先等对方进入 `running`（调用时已在跑就直接算开始），再等它离开 `running`，然后打印结束时间、最终状态和这一轮**最后一条回复的全文**（不截断）。派完活就在**后台**运行（Claude Code 用 Bash 的 `run_in_background`），跑完会自动唤醒你；不要在前台阻塞着等。参数：`--timeout <分钟>`（默认 60，最长 120）、`--interval <秒>`（默认 30）、`--start-grace <秒>`（默认 300，这么久还没开始就退出）。退出码：`0` 跑完；`2` 宽限期内没开始（消息可能没送到，`logs` 看一下）；`3` 超时仍在跑（要等就再跑一次）；`4` 停在权限请求（打印请求内容，**不代为批准**，转给用户决定）；`5` 一直查不到状态（id 不对或连不上）。最终状态是 `error`，或回复明显没说完（如对方遇到 API `ECONNRESET` 断线，会以一条不完整的回复结束这一轮），说明这一轮其实没做完，再发消息催它继续。用了 `wait` 就不必再为同一轮挂 heartbeat。
+- 走脚本 `tell` 的：对方按消息末尾的命令 `tell` 回复，会直接进到你的会话。回复要等你当前这条命令结束才会显示：发完消息就结束这一轮，或把别的活放到后台去跑；**不要用前台长时间阻塞的命令去等**（比如循环翻对方日志、按措辞猜回复内容），否则回复已经到了你也看不到。这条路没有完成通知，怕对方忘了回，就在后台跑 `wait`，或给自己挂一个有上限的 heartbeat 兜底，收到回复后立即删掉：
   ```bash
   paseo heartbeat create --cron "*/20 * * * *" --max-runs 6 --expires-in 2h --name "等 office·<对方短id>" --json \
     "检查 office 上会话 <对方短id> 的进度：paseo-peer office logs <对方短id> --tail 20；对方已回复或已完成就删掉本心跳（paseo heartbeat delete <心跳id>）并继续手上的事"
