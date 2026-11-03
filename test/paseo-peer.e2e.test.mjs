@@ -49,6 +49,21 @@ describe("paseo-peer end-to-end", { skip: haveDaemon() ? false : `Paseo CLI not 
       assert.match(miss.stdout, /^No match for /)
     })
 
+    test("find -a on another machine also searches recently created archived sessions", async () => {
+      const word = `quokka-${tag}-charlie`
+      const charlie = await b.agent("proj-charlie", "charlie", `working on ${word}`)
+      const ar = await b.cli(["archive", charlie.id])
+      assert.equal(ar.code, 0, ar.stderr)
+      // The echo provider keeps no timeline once archived, so count the sessions searched instead of matching text
+      const count = (r) => Number(/ of (\d+) sessions/.exec(r.stdout)?.[1])
+      const live = await a.peer(["b", "find", word])
+      assert.equal(live.code, 0, live.stderr)
+      const all = await a.peer(["b", "find", "-a", word])
+      assert.equal(all.code, 0, all.stderr)
+      assert.equal(count(all), count(live) + 1, `${live.stdout}\n${all.stdout}`)
+      assert.equal(all.stderr, "") // created just now: inside the default 7-day window, nothing skipped
+    })
+
     test("refuses to run when peers.json is readable by others", async () => {
       const file = path.join(a.home, "peers.json")
       chmodSync(file, 0o644)

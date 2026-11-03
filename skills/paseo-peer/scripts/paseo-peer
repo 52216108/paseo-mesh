@@ -22,7 +22,9 @@
 #                                                    title, latest exchange (project-dir defaults to the current dir name)
 #   paseo-peer <machine> find <pattern> [-a] [--days N]   Which sessions there are doing X: search every live session's
 #                                                    recent messages and commands (case-insensitive regex; -a also searches
-#                                                    closed/archived ones; --days N skips sessions idle longer, this machine only)
+#                                                    closed/archived ones; --days N skips sessions idle longer; on another
+#                                                    machine -a only adds archived sessions created in the last --days days,
+#                                                    default 7, at most 50, since each one is fetched over the relay)
 #   paseo-peer whoami                              This session's sender line: project + session name + short id
 #   paseo-peer whoami --header [--remote]          First line for messages sent with MCP tools (same wording as tell;
 #                                                    --remote for another machine)
@@ -320,17 +322,41 @@ if [ "${1:-}" = find ]; then
             }
           }
         } catch {}
-      } else if (days) {
-        console.error(zh ? "（--days 只对本机生效，这次搜全部）" : "(--days only works on this machine; searching all)")
+      } else if (days && all !== "1") {
+        console.error(zh ? "（跨机器时 --days 只配合 -a 筛已归档会话，活跃会话照常全搜）" : "(on another machine --days only narrows archived sessions with -a; live sessions are always searched)")
       }
       const cutoff = days && !remote ? Date.now() - Number(days) * 86400000 : 0
       // -a only when asked: on another machine archived sessions come back as "idle" with no archive time, so
       // without this every archived session would be scanned (hundreds of extra paseo logs calls over the relay)
-      const agents = JSON.parse(await run(["ls", "-g", ...(all === "1" ? ["-a"] : []), "--json"]))
+      let agents = JSON.parse(await run(["ls", "-g", ...(all === "1" ? ["-a"] : []), "--json"]))
         .map((a) => ({ ...a, updated: rec.get(a.id)?.updated ?? "", status: rec.get(a.id)?.archived ? "archived" : a.status }))
         .filter((a) => a.id !== self && (all === "1" || !["closed", "archived"].includes(a.status)))
         .filter((a) => !cutoff || !a.updated || Date.parse(a.updated) >= cutoff)
         .sort((x, y) => (Date.parse(y.updated) || 0) - (Date.parse(x.updated) || 0))
+      // Another machine with -a: archived sessions there come back as "idle" with no archive or activity time, and each
+      // one scanned is a separate paseo logs call over the relay (~0.6 MB). An unbounded -a once pulled 600+ archived
+      // sessions (~400 MB) through the relay in five minutes. So: tell archived ones apart by listing without -a too,
+      // keep every live session, and only take archived ones created in the last --days days (default 7), at most 50
+      if (remote && all === "1") {
+        const REMOTE_DAYS = 7, REMOTE_MAX = 50
+        const live = new Set(JSON.parse(await run(["ls", "-g", "--json"])).map((a) => a.id))
+        const unit = { second: 1e3, minute: 6e4, hour: 36e5, day: 864e5, week: 6048e5, month: 2592e6, year: 31536e6 }
+        const age = (c) => {
+          const s = String(c || "").trim().toLowerCase()
+          if (s === "just now") return 0
+          const m = /^(\d+|an?)\s+(second|minute|hour|day|week|month|year)s?\s+ago$/.exec(s)
+          return m ? (/^\d/.test(m[1]) ? Number(m[1]) : 1) * unit[m[2]] : Infinity // unknown format: treat as old
+        }
+        const span = Number(days) || REMOTE_DAYS
+        const archived = agents.filter((a) => !live.has(a.id)).map((a) => ({ ...a, status: "archived", age: age(a.created) }))
+        const recent = archived.filter((a) => a.age <= span * 864e5).sort((x, y) => x.age - y.age)
+        const kept = recent.slice(0, REMOTE_MAX)
+        agents = [...agents.filter((a) => live.has(a.id)), ...kept]
+        if (kept.length < archived.length)
+          console.error(zh
+            ? `（跨机器 -a：那边共 ${archived.length} 个已归档会话，只搜了最近 ${span} 天内创建的 ${kept.length} 个${recent.length > REMOTE_MAX ? `（每次最多 ${REMOTE_MAX} 个）` : ""}，避免经中继逐个拉取占满带宽；更早的用 --days 放宽，或先 ls -a -g 按标题/目录找到会话再 logs <id>）`
+            : `(on another machine with -a: of ${archived.length} archived sessions there, searched only the ${kept.length} created in the last ${span} days${recent.length > REMOTE_MAX ? ` (at most ${REMOTE_MAX} per run)` : ""}, so the relay is not flooded with one fetch each; widen with --days, or find the session with ls -a -g by title/dir and then logs <id>)`)
+      }
       // Line by line over recent messages and tool calls (commands carry the real signal: deploy, migrate, push…).
       // Skipped: internal reasoning ([Thought], may span lines until the next [Tag]) and whatever follows the first
       // line of a [User] entry (hook / system context injected into the prompt, not what the user said)
