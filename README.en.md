@@ -55,7 +55,7 @@ One cross-project collaboration: find the other session → start it with labels
 
 Both sets do the same thing; install the one in your language. Each side understands the other language's message markers, so mixed setups interoperate.
 
-Paseo plugins (per-turn generation speed `turn-speed`, exact usage-limit reset times `usage-reset`, and others) now live in their own repository, [paseo-plugins](https://github.com/52216108/paseo-plugins).
+Paseo plugins (per-turn generation speed `turn-speed`, exact usage-limit reset times `usage-reset`, and others) now live in their own repository, [paseo-plugins](https://github.com/gavinguo521/paseo-plugins).
 
 ## Requirements
 
@@ -68,9 +68,9 @@ Paseo plugins (per-turn generation speed `turn-speed`, exact usage-limit reset t
 Open a session in Paseo and send it the text below verbatim; it will walk you through setup. For cross-machine use, do the same on the other machine:
 
 ```text
-Please set up paseo-mesh (https://github.com/52216108/paseo-mesh) so my Paseo sessions can collaborate across projects and machines:
+Please set up paseo-mesh (https://github.com/gavinguo521/paseo-mesh) so my Paseo sessions can collaborate across projects and machines:
 1. Check that this machine has Paseo 0.12.0+ and node.
-2. Install the skills: npx skills add 52216108/paseo-mesh -g -s paseo-peer -s paseo-cross-project -y
+2. Install the skills: npx skills add gavinguo521/paseo-mesh -g -s paseo-peer -s paseo-cross-project -y
    then link the script: mkdir -p ~/.local/bin && ln -sf ~/.claude/skills/paseo-peer/scripts/paseo-peer ~/.local/bin/paseo-peer
    (use the actual install path if the skill landed elsewhere; make sure ~/.local/bin is on PATH).
 3. Read the "First-time setup" section of skill paseo-peer and walk me through it: ask whether I want cross-machine use and what to call this machine, run init and invite / join, and finish when paseo-peer doctor passes.
@@ -81,7 +81,7 @@ Pairing links and join codes are keys — don't ask me to paste them into the ch
 
 1. Install the skills on every machine (for Chinese, use `paseo-peer-zh` and `paseo-cross-project-zh`):
    ```bash
-   npx skills add 52216108/paseo-mesh -g -s paseo-peer -s paseo-cross-project
+   npx skills add gavinguo521/paseo-mesh -g -s paseo-peer -s paseo-cross-project
    mkdir -p ~/.local/bin && ln -sf ~/.claude/skills/paseo-peer/scripts/paseo-peer ~/.local/bin/paseo-peer
    ```
    That's all you need for same-machine cross-project work.
@@ -105,7 +105,7 @@ Then just tell a session things like "ask the payment-service session on the off
 To edit as you go, skip the `npx skills add` copy: clone the repo and symlink the skill directories:
 
 ```bash
-git clone https://github.com/52216108/paseo-mesh ~/projects/paseo-mesh
+git clone https://github.com/gavinguo521/paseo-mesh ~/projects/paseo-mesh
 ln -s ~/projects/paseo-mesh/skills/paseo-peer ~/.claude/skills/paseo-peer
 ln -s ~/projects/paseo-mesh/skills/paseo-cross-project ~/.claude/skills/paseo-cross-project
 ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # paseo-peer — let Paseo sessions in different projects and on different machines find and message each other.
-# https://github.com/52216108/paseo-mesh
+# https://github.com/gavinguo521/paseo-mesh
 #
 # Machine list: ~/.paseo/peers.json (private to this machine, chmod 600, holds pairing links — never commit it).
 # See peers.example.json in the repo for the format.

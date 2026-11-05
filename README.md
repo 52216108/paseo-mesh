@@ -55,7 +55,7 @@ paseo-mesh 是两个 Agent Skill 加一个小脚本，补上的就是这块：**
 
 中英两套功能相同，按你的语言装一套即可；两种语言的消息标记双方都认，混用也能互通。
 
-Paseo 插件（每轮生成速度 `turn-speed`、限额具体刷新时刻 `usage-reset` 等）已拆到独立仓库 [paseo-plugins](https://github.com/52216108/paseo-plugins)。
+Paseo 插件（每轮生成速度 `turn-speed`、限额具体刷新时刻 `usage-reset` 等）已拆到独立仓库 [paseo-plugins](https://github.com/gavinguo521/paseo-plugins)。
 
 ## 环境要求
 
@@ -68,9 +68,9 @@ Paseo 插件（每轮生成速度 `turn-speed`、限额具体刷新时刻 `usage
 在 Paseo 里开一个会话，把下面这段原样发过去，它会一步步带你配置；要跨机器的话，另一台机器上也发一次：
 
 ```text
-请帮我配置 paseo-mesh（https://github.com/52216108/paseo-mesh），让我的 Paseo 会话能跨项目、跨机器协作：
+请帮我配置 paseo-mesh（https://github.com/gavinguo521/paseo-mesh），让我的 Paseo 会话能跨项目、跨机器协作：
 1. 确认本机有 Paseo 0.12.0+ 和 node；
-2. 安装中文版 skill：npx skills add 52216108/paseo-mesh -g -s paseo-peer-zh -s paseo-cross-project-zh -y
+2. 安装中文版 skill：npx skills add gavinguo521/paseo-mesh -g -s paseo-peer-zh -s paseo-cross-project-zh -y
    然后建链接 mkdir -p ~/.local/bin && ln -sf ~/.claude/skills/paseo-peer-zh/scripts/paseo-peer ~/.local/bin/paseo-peer
    （skill 实际装在别处的话按实际路径链接；确认 ~/.local/bin 在 PATH 里）；
 3. 读 skill paseo-peer-zh 的「首次配置」一节，按它一步步引导我：问我要不要跨机器、本机叫什么名字，帮我 init、invite / join，最后 paseo-peer doctor 全部通过。
@@ -81,7 +81,7 @@ Paseo 插件（每轮生成速度 `turn-speed`、限额具体刷新时刻 `usage
 
 1. 每台机器安装 skill（英文版把名字换成 `paseo-peer`、`paseo-cross-project`）：
    ```bash
-   npx skills add 52216108/paseo-mesh -g -s paseo-peer-zh -s paseo-cross-project-zh
+   npx skills add gavinguo521/paseo-mesh -g -s paseo-peer-zh -s paseo-cross-project-zh
    mkdir -p ~/.local/bin && ln -sf ~/.claude/skills/paseo-peer-zh/scripts/paseo-peer ~/.local/bin/paseo-peer
    ```
    只在本机做跨项目协作的话，到这里就够了。
@@ -105,7 +105,7 @@ Paseo 插件（每轮生成速度 `turn-speed`、限额具体刷新时刻 `usage
 想边用边改的话，不必用 `npx skills add` 的副本，把仓库克隆下来，再把 skill 目录链接进去：
 
 ```bash
-git clone https://github.com/52216108/paseo-mesh ~/projects/paseo-mesh
+git clone https://github.com/gavinguo521/paseo-mesh ~/projects/paseo-mesh
 ln -s ~/projects/paseo-mesh/skills/paseo-peer-zh ~/.claude/skills/paseo-peer-zh
 ln -s ~/projects/paseo-mesh/skills/paseo-cross-project-zh ~/.claude/skills/paseo-cross-project-zh
 ```
